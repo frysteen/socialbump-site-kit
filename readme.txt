@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.3.1
+Stable tag: 0.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 0.3.2 =
+* Change: a file is opened and checked before it is deleted as an orphan, so something merely named like an image is left alone.
+
 = 0.3.1 =
 * Fix: preview images belonging to PDFs were being counted as orphans, because their metadata has no path of its own.
 * Change: only picture files are ever treated as orphans, so data files other plugins keep in the uploads folder are left alone.

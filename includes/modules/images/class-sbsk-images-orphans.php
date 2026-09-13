@@ -86,6 +86,32 @@ class SBSK_Images_Orphans {
 	 * in to stop directory listings, server config, and anything hidden.
 	 */
 	/**
+	 * Read the file itself to see whether it really is an image.
+	 *
+	 * The listing goes by file extension, which is quick and needs no reading, but
+	 * a name proves nothing. Anything about to be deleted is opened first, so a
+	 * mislabelled file is left where it is.
+	 */
+	public static function looks_like_image( $path ) {
+		$name = strtolower( basename( $path ) );
+
+		// A WebP an optimiser wrote is a real image whatever sits before the extension.
+		if ( substr( $name, -5 ) === '.webp' ) {
+			$name = substr( $name, 0, -5 );
+		}
+
+		$info = @getimagesize( $path );
+
+		if ( is_array( $info ) && ! empty( $info[0] ) ) {
+			return true;
+		}
+
+		// getimagesize does not know every format, so fall back to the reported type.
+		$type = function_exists( 'wp_get_image_mime' ) ? wp_get_image_mime( $path ) : '';
+
+		return is_string( $type ) && strpos( $type, 'image/' ) === 0;
+	}
+	/**
 	 * Only picture files are ever treated as orphans. Plenty of plugins keep data
 	 * in the uploads folder, a geolocation database or an export for instance,
 	 * and none of that is ours to tidy up.
@@ -189,7 +215,7 @@ class SBSK_Images_Orphans {
 				continue;
 			}
 
-			if ( self::is_protected( $path ) || ! self::is_image_file( $path ) ) {
+			if ( self::is_protected( $path ) || ! self::is_image_file( $path ) || ! self::looks_like_image( $path ) ) {
 				continue;
 			}
 
