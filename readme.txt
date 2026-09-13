@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.4.5
+Stable tag: 0.4.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,10 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 0.4.6 =
+* New WooCommerce module: Download Analytics as CSV, which puts a download button on each Analytics report for the range on screen, plus a ZIP of all four on the Overview page.
+* Excerpt character counter now follows the WooCommerce product short description as you type, instead of only counting on page load.
+
 = 0.4.5 =
 * New WooCommerce module: require login to check out, which sends a logged out customer to My Account and back again. Greys itself out while guest checkout is switched on, with a link to that setting.
 
