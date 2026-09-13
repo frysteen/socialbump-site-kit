@@ -85,7 +85,7 @@ class SBSK_Images_Rebuild {
 	}
 
 	/** Remove a generated file and any WebP written beside it. */
-	private static function delete_file( $path ) {
+	public static function delete_file( $path ) {
 		$removed = 0;
 
 		foreach ( [ $path, $path . '.webp' ] as $file ) {
@@ -168,5 +168,97 @@ class SBSK_Images_Rebuild {
 		$result['built'] = array_values( array_diff( $wanted_missing, self::missing( $id ) ) );
 
 		return $result;
+	}
+	/** Build the sizes this attachment is missing. Nothing is deleted. */
+	public static function build( $id ) {
+		$built = [];
+
+		if ( ! wp_attachment_is_image( $id ) ) {
+			return $built;
+		}
+
+		$file = get_attached_file( $id );
+
+		if ( ! $file || ! file_exists( $file ) ) {
+			return $built;
+		}
+
+		$wanted = self::missing( $id );
+
+		if ( ! $wanted ) {
+			return $built;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+
+		if ( function_exists( 'wp_create_image_subsizes' ) ) {
+			wp_create_image_subsizes( $file, $id );
+		}
+
+		return array_values( array_diff( $wanted, self::missing( $id ) ) );
+	}
+
+	/** Remove sizes we own that are no longer wanted. Nothing is built. */
+	public static function clean( $id ) {
+		$result = [ 'removed' => [], 'files' => 0 ];
+
+		if ( ! wp_attachment_is_image( $id ) ) {
+			return $result;
+		}
+
+		$file = get_attached_file( $id );
+		$meta = (array) wp_get_attachment_metadata( $id );
+
+		if ( ! $file ) {
+			return $result;
+		}
+
+		$folder = dirname( $file );
+
+		foreach ( self::stale( $id, $meta ) as $name ) {
+			if ( ! empty( $meta['sizes'][ $name ]['file'] ) ) {
+				$result['files'] += self::delete_file( $folder . '/' . $meta['sizes'][ $name ]['file'] );
+			}
+
+			unset( $meta['sizes'][ $name ] );
+			$result['removed'][] = $name;
+		}
+
+		if ( $result['removed'] ) {
+			wp_update_attachment_metadata( $id, $meta );
+		}
+
+		return $result;
+	}
+	/**
+	 * The files that clearing would actually delete for one attachment:
+	 * each old thumbnail, plus any WebP copy sitting beside it.
+	 */
+	public static function stale_files( $id, array $meta = null ) {
+		$meta  = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
+		$file  = get_attached_file( $id );
+		$count = 0;
+
+		if ( ! $file ) {
+			return 0;
+		}
+
+		$folder = dirname( $file );
+
+		foreach ( self::stale( $id, $meta ) as $name ) {
+			if ( empty( $meta['sizes'][ $name ]['file'] ) ) {
+				continue;
+			}
+
+			$path = $folder . '/' . $meta['sizes'][ $name ]['file'];
+
+			foreach ( [ $path, $path . '.webp' ] as $candidate ) {
+				if ( file_exists( $candidate ) ) {
+					$count++;
+				}
+			}
+		}
+
+		return $count;
 	}
 }

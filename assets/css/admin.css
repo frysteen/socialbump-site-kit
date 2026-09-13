@@ -673,3 +673,279 @@ a.sbsk-header__version.is-outdated:focus {
 	outline: 2px solid #85df07;
 	outline-offset: 3px;
 }
+
+/* Feature list on a module card */
+.sbsk-features {
+	margin: 0 0 4px;
+	font-size: 13px;
+}
+
+.sbsk-features li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	padding: 3px 0;
+	color: #50575e;
+}
+
+.sbsk-features li.is-off {
+	color: #8c8f94;
+}
+
+.sbsk-dot {
+	flex: 0 0 auto;
+	width: 8px;
+	height: 8px;
+	background: #dcdcde;
+	border-radius: 50%;
+}
+
+.sbsk-features li.is-on .sbsk-dot {
+	background: #85df07;
+	box-shadow: 0 0 0 2px rgba(133, 223, 7, 0.25);
+}
+
+/* The settings link sits at the foot of every card */
+.sbsk-grid {
+	align-items: stretch;
+}
+
+.sbsk-card {
+	display: flex;
+	flex-direction: column;
+}
+
+.sbsk-card__link {
+	margin-top: auto;
+	padding-top: 12px;
+}
+
+/* Divider between the description and the feature list */
+.sbsk-features {
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid #e6e7e8;
+}
+
+/* A section heading with its own switch */
+.sbsk-section__head--switch {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.sbsk-section__head--switch p {
+	margin-bottom: 0;
+}
+
+/* Add and reset, at either end of the row */
+.sbsk-width-actions {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 14px;
+}
+
+.wp-core-ui .sbsk-button--danger {
+	background: #fff;
+	border-color: #d63638;
+	color: #d63638;
+}
+
+.wp-core-ui .sbsk-button--danger:hover,
+.wp-core-ui .sbsk-button--danger:focus {
+	background: #d63638;
+	border-color: #d63638;
+	color: #fff;
+}
+
+/* Image report */
+.sbsk-report__panel {
+	margin-top: 4px;
+}
+
+.sbsk-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 12px;
+}
+
+.sbsk-stat {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 14px 16px;
+	background: #f6f7f7;
+	border-radius: 6px;
+	border-left: 3px solid #c3c4c7;
+}
+
+.sbsk-stat.is-good {
+	border-left-color: #85df07;
+}
+
+.sbsk-stat.is-warn {
+	border-left-color: #dba617;
+	background: #fdf8e8;
+}
+
+.sbsk-stat__value {
+	font-size: 24px;
+	font-weight: 600;
+	line-height: 1.1;
+	color: #1d2327;
+}
+
+.sbsk-stat__label {
+	font-size: 13px;
+	color: #1d2327;
+}
+
+.sbsk-stat__note {
+	font-size: 12px;
+	color: #646970;
+}
+
+.sbsk-report__title {
+	margin: 20px 0 4px;
+	font-size: 14px;
+}
+
+.sbsk-report__note {
+	margin: 0 0 10px;
+	color: #646970;
+	font-size: 12px;
+}
+
+table.sbsk-report {
+	width: 100%;
+	max-width: 700px;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+
+table.sbsk-report td {
+	padding: 6px 10px 6px 0;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+table.sbsk-report td:last-child {
+	width: 90px;
+	color: #646970;
+	text-align: right;
+}
+
+/**
+ * WordPress styles .button with a display of its own, which beats the browser
+ * rule for the hidden attribute, so hidden buttons kept showing.
+ */
+.sbsk-wrap [hidden] {
+	display: none !important;
+}
+
+/* Orphan list */
+table.sbsk-report td:last-child {
+	width: auto;
+}
+
+.sbsk-report__size {
+	color: #646970;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.wp-core-ui .sbsk-report__delete {
+	min-height: 0;
+	padding: 1px 9px;
+	height: auto;
+	line-height: 1.7;
+	font-size: 11px;
+	color: #d63638;
+	border-color: #d63638;
+}
+
+.wp-core-ui .sbsk-report__delete:hover,
+.wp-core-ui .sbsk-report__delete:focus,
+.wp-core-ui .sbsk-report__delete:active {
+	background: #d63638;
+	border-color: #d63638;
+	color: #fff;
+	box-shadow: none;
+}
+
+.wp-core-ui .sbsk-report__delete:focus {
+	outline: 2px solid transparent;
+	box-shadow: 0 0 0 1px #fff, 0 0 0 3px #d63638;
+}
+
+table.sbsk-report td.sbsk-report__action {
+	width: 70px;
+	text-align: right;
+}
+
+/* Progress, shown only while something is running */
+.sbsk-progress {
+	position: relative;
+	margin: 18px 0;
+	padding: 14px 40px 14px 16px;
+	background: #f6f7f7;
+	border-radius: 6px;
+}
+
+.sbsk-progress .sbsk-rebuild__status {
+	margin: 8px 0 0;
+}
+
+.sbsk-progress__close {
+	position: absolute;
+	top: 6px;
+	right: 8px;
+	padding: 0 6px;
+	background: none;
+	border: 0;
+	color: #646970;
+	font-size: 18px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.sbsk-progress__close:hover {
+	color: #1d2327;
+}
+
+/* Orphan list in a box of its own */
+.sbsk-report__orphans {
+	margin-top: 20px;
+	padding: 16px 18px;
+	background: #fbfbfc;
+	border: 1px solid #e6e7e8;
+	border-radius: 6px;
+}
+
+.sbsk-report__orphans .sbsk-report__title {
+	margin-top: 0;
+}
+
+.sbsk-report__orphans table.sbsk-report tr:last-child td {
+	border-bottom: 0;
+}
+
+/* Room between the results, the progress panel and the buttons */
+.sbsk-report__orphans {
+	margin-bottom: 20px;
+}
+
+.sbsk-rebuild .sbsk-stats {
+	margin-bottom: 20px;
+}
+
+.sbsk-progress {
+	margin: 0 0 20px;
+}
+
+.sbsk-rebuild__actions {
+	margin-top: 0;
+}

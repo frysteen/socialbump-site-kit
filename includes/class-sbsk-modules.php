@@ -28,6 +28,8 @@ class SBSK_Modules {
 
 	const SETTINGS_OPTION = 'sbsk_module_settings';
 
+	const GROUPS_OPTION = 'sbsk_groups';
+
 	private $modules = [];
 
 	private $active = [];
@@ -130,6 +132,36 @@ class SBSK_Modules {
 		return $this->active;
 	}
 
+	/**
+	 * Groups are the top level switches on the Modules page. A group that is off
+	 * hides its page and stops everything inside it from loading.
+	 */
+	public function group_states() {
+		$saved  = (array) get_option( self::GROUPS_OPTION, [] );
+		$states = [];
+
+		foreach ( array_keys( SBSK_Settings::instance()->sections() ) as $group ) {
+			$states[ $group ] = array_key_exists( $group, $saved ) ? (bool) $saved[ $group ] : true;
+		}
+
+		return $states;
+	}
+
+	public function group_enabled( $group ) {
+		$states = $this->group_states();
+
+		return $group === '' || ! isset( $states[ $group ] ) || $states[ $group ];
+	}
+
+	/** The modules that belong to one group. */
+	public function in_group( $group ) {
+		return array_filter(
+			$this->switchable(),
+			function ( $module ) use ( $group ) {
+				return $module['section'] === $group;
+			}
+		);
+	}
 	public function get_states() {
 		$saved  = (array) get_option( SBSK_OPTION, [] );
 		$states = [];
@@ -143,6 +175,10 @@ class SBSK_Modules {
 
 	public function is_enabled( $id ) {
 		if ( ! isset( $this->modules[ $id ] ) ) {
+			return false;
+		}
+
+		if ( ! $this->group_enabled( $this->modules[ $id ]['section'] ) ) {
 			return false;
 		}
 

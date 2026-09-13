@@ -105,79 +105,177 @@
 			} );
 		}
 
-		// Images page: rebuild in batches so a big library cannot time out.
+		// Images page: scan first, then offer only the jobs that are worth doing.
 		var $rebuild = $( '#sbsk-rebuild' );
 
 		if ( $rebuild.length ) {
-			var $run    = $( '#sbsk-rebuild-run' );
+			var $scan   = $( '#sbsk-scan' );
+			var $build  = $( '#sbsk-rebuild-run' );
+			var $clean  = $( '#sbsk-rebuild-clean' );
+			var $orphan = $( '#sbsk-orphans-run' );
+			var $force  = $( '#sbsk-force-wrap' );
+			var $panel  = $( '#sbsk-report' );
 			var $status = $rebuild.find( '.sbsk-rebuild__status' );
-			var $bar    = $rebuild.find( '.sbsk-rebuild__bar span' );
+			var $progress = $( '#sbsk-progress' );
+			var $barWrap  = $( '#sbsk-rebuild-bar' );
+			var $bar    = $barWrap.find( 'span' );
 			var totals  = { built: 0, removed: 0, files: 0 };
+			var lastMissing = 0;
+			var nonce   = $rebuild.data( 'nonce' );
 
-			function batch( offset, total, force ) {
-				$.post( ajaxurl, {
-					action: 'sbsk_images_batch',
-					nonce: $rebuild.data( 'nonce' ),
-					offset: offset,
-					force: force ? 1 : 0
-				} ).done( function ( response ) {
+			function buttons( on ) {
+				$rebuild.find( 'button' ).prop( 'disabled', ! on );
+
+				if ( on ) {
+					$build.prop( 'disabled', lastMissing < 1 && ! $( '#sbsk-rebuild-force' ).prop( 'checked' ) );
+				}
+			}
+
+			function scan( quiet ) {
+				buttons( false );
+
+				if ( ! quiet ) {
+					$panel.prop( 'hidden', false ).html( '<p>Looking through the library...</p>' );
+				}
+
+				return $.post( ajaxurl, { action: 'sbsk_images_report', nonce: nonce } ).done( function ( response ) {
+					buttons( true );
+
+					if ( ! response || ! response.success ) {
+						$panel.html( '<p>The scan could not be run.</p>' );
+						return;
+					}
+
+					var data = response.data;
+
+					$panel.prop( 'hidden', false ).html( data.html );
+					lastMissing = data.missing;
+					$build.prop( 'disabled', data.missing < 1 && ! $( '#sbsk-rebuild-force' ).prop( 'checked' ) );
+					$clean.prop( 'hidden', data.stale < 1 );
+					$orphan.prop( 'hidden', data.orphans < 1 );
+					$force.prop( 'hidden', false );
+					$scan.text( 'Scan again' );
+				} );
+			}
+
+			function batch( offset, total, force, mode ) {
+				$.post( ajaxurl, { action: 'sbsk_images_batch', nonce: nonce, offset: offset, force: force ? 1 : 0, mode: mode } ).done( function ( response ) {
 					if ( ! response || ! response.success ) {
 						$status.text( 'Something went wrong. Try again.' );
-						$run.prop( 'disabled', false );
+						buttons( true );
 						return;
 					}
 
 					var data = response.data;
 
 					totals.built += data.built;
-					totals.removed += data.removed;
 					totals.files += data.files;
 
 					var done = Math.min( data.offset, total );
-					var pct  = total ? Math.round( ( done / total ) * 100 ) : 100;
 
-					$bar.css( 'width', pct + '%' );
-					$status.text( done + ' of ' + total + ' checked. ' + totals.built + ' sizes built, ' + totals.files + ' files removed.' );
+					$bar.css( 'width', ( total ? Math.round( ( done / total ) * 100 ) : 100 ) + '%' );
+					$status.text( done + ' of ' + total + ' checked.' );
 
 					if ( data.done || done >= total ) {
 						$status.text( 'Finished. ' + totals.built + ' sizes built, ' + totals.files + ' files removed.' );
-						$run.prop( 'disabled', false );
+						scan( true );
 						return;
 					}
 
-					batch( data.offset, total, force );
+					batch( data.offset, total, force, mode );
 				} ).fail( function () {
 					$status.text( 'The server did not answer. Nothing else was changed.' );
-					$run.prop( 'disabled', false );
+					buttons( true );
 				} );
 			}
 
-			$run.on( 'click', function () {
-				var force = $( '#sbsk-rebuild-force' ).prop( 'checked' );
-
-				if ( force && ! window.confirm( 'Rebuild every size again? This replaces files that already exist.' ) ) {
-					return;
-				}
-
+			function start( mode, force ) {
 				totals = { built: 0, removed: 0, files: 0 };
-				$run.prop( 'disabled', true );
-				$status.text( 'Working...' );
-				$bar.css( 'width', '0%' );
 
-				$.post( ajaxurl, { action: 'sbsk_images_count', nonce: $rebuild.data( 'nonce' ) } ).done( function ( response ) {
+				buttons( false );
+				$progress.prop( 'hidden', false );
+				$bar.css( 'width', '0%' );
+				$status.text( 'Working...' );
+
+				$.post( ajaxurl, { action: 'sbsk_images_count', nonce: nonce } ).done( function ( response ) {
 					var total = ( response && response.success ) ? response.data.total : 0;
 
 					if ( ! total ) {
 						$status.text( 'No images found.' );
-						$run.prop( 'disabled', false );
+						buttons( true );
 						return;
 					}
 
-					batch( 0, total, force );
+					batch( 0, total, force, mode );
+				} );
+			}
+
+			$( '#sbsk-rebuild-force' ).on( 'change', function () {
+				$build.prop( 'disabled', ! this.checked && lastMissing < 1 );
+			} );
+
+			$panel.on( 'click', '.sbsk-report__delete', function () {
+				var $button = $( this );
+				var file    = $button.data( 'file' );
+
+				if ( ! window.confirm( 'Delete ' + file + '? This cannot be undone.' ) ) {
+					return;
+				}
+
+				$button.prop( 'disabled', true ).text( 'Deleting...' );
+
+				$.post( ajaxurl, { action: 'sbsk_images_orphan_one', nonce: nonce, file: file } ).done( function ( response ) {
+					if ( response && response.success ) {
+						$button.closest( 'tr' ).remove();
+						scan( true );
+						return;
+					}
+
+					$button.prop( 'disabled', false ).text( 'Delete' );
+				} );
+			} );
+
+			$( '#sbsk-progress-close' ).on( 'click', function () {
+				$progress.prop( 'hidden', true );
+			} );
+
+			$scan.on( 'click', function () {
+				$progress.prop( 'hidden', true );
+				scan( false );
+			} );
+
+			$build.on( 'click', function () {
+				var force = $( '#sbsk-rebuild-force' ).prop( 'checked' );
+
+				if ( force && ! window.confirm( 'Build every size again? This replaces files that already exist.' ) ) {
+					return;
+				}
+
+				start( 'build', force );
+			} );
+
+			$clean.on( 'click', function () {
+				if ( ! window.confirm( 'Remove the thumbnails left over from sizes you have taken off the list?' ) ) {
+					return;
+				}
+
+				start( 'clean', false );
+			} );
+
+			$orphan.on( 'click', function () {
+				if ( ! window.confirm( 'Delete the files in the uploads folders that no image in the library refers to? This cannot be undone.' ) ) {
+					return;
+				}
+
+				buttons( false );
+				$status.text( 'Clearing...' );
+
+				$.post( ajaxurl, { action: 'sbsk_images_orphans', nonce: nonce } ).done( function ( response ) {
+					$status.text( ( response && response.success ) ? response.data.message : 'Nothing was changed.' );
+					scan( true );
 				} );
 			} );
 		}
-
 		// Attachment details: rebuild one image.
 		$( document ).on( 'click', '.sbsk-regenerate', function () {
 			var $button = $( this );
@@ -199,6 +297,29 @@
 			} ).fail( function () {
 				$button.prop( 'disabled', false ).text( 'Regenerate sizes' );
 			} );
+		} );
+
+		// Images page: the sizes list follows its switch, and reset asks first.
+		var $rebuildOn = $( '#sbsk-rebuild-on' );
+
+		if ( $rebuildOn.length ) {
+			$rebuildOn.on( 'change', function () {
+				$( '#sbsk-rebuild-body' ).prop( 'hidden', ! this.checked );
+			} );
+		}
+
+		var $sizesOn = $( '#sbsk-sizes-on' );
+
+		if ( $sizesOn.length ) {
+			$sizesOn.on( 'change', function () {
+				$( '#sbsk-sizes-body' ).prop( 'hidden', ! this.checked );
+			} );
+		}
+
+		$( '#sbsk-reset-widths' ).on( 'click', function ( e ) {
+			if ( ! window.confirm( 'Put the standard image sizes back? Any widths you have added or changed will be lost.' ) ) {
+				e.preventDefault();
+			}
 		} );
 
 		$( '.sbsk-card .sbsk-switch input' ).on( 'change', function () {

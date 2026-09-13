@@ -46,6 +46,10 @@ class SBSK_Images {
 	public static function register_sizes() {
 		add_theme_support( 'post-thumbnails' );
 
+		if ( ! self::setting( 'sizes_on', 1 ) ) {
+			return;
+		}
+
 		foreach ( self::widths() as $width ) {
 			add_image_size( 'image-' . (int) $width, (int) $width, 9999 );
 		}
@@ -57,6 +61,10 @@ class SBSK_Images {
 	}
 
 	public static function size_names( $names ) {
+		if ( ! self::setting( 'sizes_on', 1 ) ) {
+			return $names;
+		}
+
 		foreach ( self::widths() as $width ) {
 			$key           = 'image-' . (int) $width;
 			$names[ $key ] = $key;
@@ -128,6 +136,17 @@ class SBSK_Images {
 
 		check_admin_referer( 'sbsk_save_images' );
 
+		// Reset puts the standard set back, whatever is in the boxes.
+		if ( ! empty( $_POST['sbsk_reset_sizes'] ) ) {
+			$settings                    = (array) get_option( SBSK_Modules::SETTINGS_OPTION, [] );
+			$settings['images']['sizes'] = self::DEFAULT_WIDTHS;
+
+			update_option( SBSK_Modules::SETTINGS_OPTION, $settings );
+
+			wp_safe_redirect( admin_url( 'admin.php?page=' . SBSK_Settings::group_page_slug( 'images' ) . '&updated=true' ) );
+			exit;
+		}
+
 		$widths = isset( $_POST['sbsk_widths'] ) ? (array) wp_unslash( $_POST['sbsk_widths'] ) : [];
 		$clean  = [];
 
@@ -144,6 +163,8 @@ class SBSK_Images {
 
 		$settings           = (array) get_option( SBSK_Modules::SETTINGS_OPTION, [] );
 		$settings['images'] = [
+			'sizes_on'     => empty( $_POST['sbsk_sizes_on'] ) ? 0 : 1,
+			'rebuild_on'   => empty( $_POST['sbsk_rebuild_on'] ) ? 0 : 1,
 			'sizes'        => $clean ? $clean : self::DEFAULT_WIDTHS,
 			'clean_titles' => empty( $_POST['sbsk_clean_titles'] ) ? 0 : 1,
 			'auto_alt'     => empty( $_POST['sbsk_auto_alt'] ) ? 0 : 1,
@@ -160,9 +181,6 @@ class SBSK_Images {
 	public static function render_page() {
 		$post_url = esc_url( admin_url( 'admin-post.php' ) );
 
-		if ( isset( $_GET['updated'] ) ) {
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'sb-site-kit' ) . '</p></div>';
-		}
 
 		echo '<form method="post" action="' . $post_url . '">';
 		echo '<input type="hidden" name="action" value="sbsk_save_images">';
@@ -171,7 +189,17 @@ class SBSK_Images {
 		// Sizes
 		echo '<div class="sbsk-images">';
 
-		echo '<section class="sbsk-section"><div class="sbsk-section__head"><h2>' . esc_html__( 'Image sizes', 'sb-site-kit' ) . '</h2><p>' . esc_html__( 'Each width becomes a size named after it, uncropped, so the height follows the original. A new width only applies to images uploaded afterwards.', 'sb-site-kit' ) . '</p></div>';
+		$sizes_on = (bool) self::setting( 'sizes_on', 1 );
+
+		echo '<section class="sbsk-section">';
+		echo '<div class="sbsk-section__head sbsk-section__head--switch">';
+		echo '<div><h2>' . esc_html__( 'Image sizes', 'sb-site-kit' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Each width becomes a size named after it, uncropped, so the height follows the original. A new width only applies to images uploaded afterwards.', 'sb-site-kit' ) . '</p></div>';
+		echo '<label class="sbsk-switch"><input type="checkbox" id="sbsk-sizes-on" name="sbsk_sizes_on" value="1" ' . checked( $sizes_on, true, false ) . '>';
+		echo '<span class="sbsk-switch__track"><span class="sbsk-switch__dot"></span></span>';
+		echo '<span class="screen-reader-text">' . esc_html__( 'Add these image sizes', 'sb-site-kit' ) . '</span></label>';
+		echo '</div>';
+		echo '<div class="sbsk-sizes-body" id="sbsk-sizes-body"' . ( $sizes_on ? '' : ' hidden' ) . '>';
 		echo '<div class="sbsk-widths" id="sbsk-widths">';
 
 		foreach ( self::widths() as $width ) {
@@ -179,7 +207,11 @@ class SBSK_Images {
 		}
 
 		echo '</div>';
-		echo '<p><button type="button" class="button" id="sbsk-add-width">' . esc_html__( 'Add a width', 'sb-site-kit' ) . '</button></p>';
+		echo '<div class="sbsk-width-actions">';
+		echo '<button type="button" class="button" id="sbsk-add-width">' . esc_html__( 'Add a width', 'sb-site-kit' ) . '</button>';
+		echo '<button type="submit" class="button sbsk-button--danger" name="sbsk_reset_sizes" value="1" id="sbsk-reset-widths">' . esc_html__( 'Reset to default sizes', 'sb-site-kit' ) . '</button>';
+		echo '</div>';
+		echo '</div>';
 		echo '</section>';
 
 		// On upload
@@ -190,10 +222,10 @@ class SBSK_Images {
 
 		echo '</div>';
 
+		self::render_rebuild();
+
 		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ) );
 		echo '</form>';
-
-		self::render_rebuild();
 	}
 
 	/** One row in the width list. */
@@ -228,27 +260,33 @@ class SBSK_Images {
 	 * batches, so a large library cannot stall the request.
 	 */
 	private static function render_rebuild() {
-		$summary = SBSK_Images_Tools::summary();
+		$rebuild_on = (bool) self::setting( 'rebuild_on', 1 );
 
 		echo '<section class="sbsk-section sbsk-rebuild" id="sbsk-rebuild" data-nonce="' . esc_attr( wp_create_nonce( 'sbsk_images' ) ) . '">';
-		echo '<div class="sbsk-section__head"><h2>' . esc_html__( 'Rebuild', 'sb-site-kit' ) . '</h2><p>' . esc_html__( 'Builds any sizes that are missing and removes files for sizes this plugin created but no longer uses, including their WebP copies. Sizes from WordPress, the theme or other plugins are never touched.', 'sb-site-kit' ) . '</p></div>';
+		echo '<div class="sbsk-section__head sbsk-section__head--switch">';
+		echo '<div><h2>' . esc_html__( 'Rebuild Thumbnails', 'sb-site-kit' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Scan the library to see what is missing, what is left over from sizes you have removed, and what is sitting in the uploads folder unaccounted for.', 'sb-site-kit' ) . '</p></div>';
+		echo '<label class="sbsk-switch"><input type="checkbox" id="sbsk-rebuild-on" name="sbsk_rebuild_on" value="1" ' . checked( $rebuild_on, true, false ) . '>';
+		echo '<span class="sbsk-switch__track"><span class="sbsk-switch__dot"></span></span>';
+		echo '<span class="screen-reader-text">' . esc_html__( 'Rebuild Thumbnails', 'sb-site-kit' ) . '</span></label>';
+		echo '</div>';
+		echo '<div class="sbsk-rebuild-body" id="sbsk-rebuild-body"' . ( $rebuild_on ? '' : ' hidden' ) . '>';
 
-		echo '<p class="sbsk-rebuild__counts">';
-		printf(
-			esc_html__( '%1$s images. %2$s missing a size. %3$s with files to clear.', 'sb-site-kit' ),
-			'<strong>' . (int) $summary['total'] . '</strong>',
-			'<strong>' . (int) $summary['missing'] . '</strong>',
-			'<strong>' . (int) $summary['stale'] . '</strong>'
-		);
-		echo '</p>';
-
-		echo '<div class="sbsk-rebuild__bar"><span></span></div>';
+		// Everything below is filled in once the scan has run.
+		echo '<div class="sbsk-report__panel" id="sbsk-report" hidden></div>';
+		echo '<div class="sbsk-progress" id="sbsk-progress" hidden>';
+		echo '<button type="button" class="sbsk-progress__close" id="sbsk-progress-close" aria-label="' . esc_attr__( 'Hide progress', 'sb-site-kit' ) . '">&times;</button>';
+		echo '<div class="sbsk-rebuild__bar" id="sbsk-rebuild-bar"><span></span></div>';
 		echo '<p class="sbsk-rebuild__status" role="status"></p>';
+		echo '</div>';
 
 		echo '<div class="sbsk-rebuild__actions">';
-		echo '<button type="button" class="button button-primary" id="sbsk-rebuild-run">' . esc_html__( 'Rebuild missing sizes', 'sb-site-kit' ) . '</button>';
-		echo '<label class="sbsk-rebuild__force"><input type="checkbox" id="sbsk-rebuild-force"> ' . esc_html__( 'Rebuild every size again, even where files already exist', 'sb-site-kit' ) . '</label>';
+		echo '<button type="button" class="button button-primary" id="sbsk-scan">' . esc_html__( 'Scan images', 'sb-site-kit' ) . '</button>';
+		echo '<button type="button" class="button" id="sbsk-rebuild-run" disabled>' . esc_html__( 'Build Thumbnails', 'sb-site-kit' ) . '</button>';
+		echo '<button type="button" class="button" id="sbsk-rebuild-clean" hidden>' . esc_html__( 'Remove old sizes', 'sb-site-kit' ) . '</button>';
+		echo '<button type="button" class="button sbsk-button--danger" id="sbsk-orphans-run" hidden>' . esc_html__( 'Delete orphan images', 'sb-site-kit' ) . '</button>';
+		echo '<label class="sbsk-rebuild__force" id="sbsk-force-wrap" hidden><input type="checkbox" id="sbsk-rebuild-force"> ' . esc_html__( 'Force rebuild all thumbnails', 'sb-site-kit' ) . '</label>';
 		echo '</div>';
-		echo '</section>';
+		echo '</div></section>';
 	}
 }

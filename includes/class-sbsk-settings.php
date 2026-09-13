@@ -23,6 +23,7 @@ class SBSK_Settings {
 	public function boot() {
 		add_action( 'admin_menu', [ $this, 'add_menu' ], 20 );
 		add_action( 'admin_post_sbsk_save', [ $this, 'save' ] );
+		add_action( 'admin_post_sbsk_save_groups', [ $this, 'save_groups' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'styles' ] );
 	}
 
@@ -31,12 +32,14 @@ class SBSK_Settings {
 	 * It lands on the feature switches. Modules that are switched on can add their own pages under it.
 	 */
 	public function add_menu() {
+		$sections = $this->sections();
+
 		add_menu_page(
 			esc_html__( 'SocialBUMP Site Kit', 'sb-site-kit' ),
 			esc_html__( 'SB Site Kit', 'sb-site-kit' ),
 			'manage_options',
 			self::PAGE_SLUG,
-			[ $this, 'render' ],
+			[ $this, 'render_groups' ],
 			$this->menu_icon(),
 			$this->menu_position()
 		);
@@ -45,11 +48,40 @@ class SBSK_Settings {
 		add_submenu_page(
 			self::PAGE_SLUG,
 			esc_html__( 'SocialBUMP Site Kit', 'sb-site-kit' ),
-			esc_html__( 'Features', 'sb-site-kit' ),
+			esc_html__( 'Modules', 'sb-site-kit' ),
 			'manage_options',
 			self::PAGE_SLUG,
-			[ $this, 'render' ]
+			[ $this, 'render_groups' ]
 		);
+
+		/**
+		 * Each group that is switched on gets a page of its own. A group with its
+		 * own settings page, such as Images, links straight to that instead of
+		 * showing a list with a single card on it.
+		 */
+		foreach ( SBSK_Modules::instance()->group_states() as $group => $on ) {
+			if ( ! $on ) {
+				continue;
+			}
+
+			$section = isset( $sections[ $group ] ) ? $sections[ $group ] : [];
+			$modules = SBSK_Modules::instance()->in_group( $group );
+
+			if ( ! $modules ) {
+				continue;
+			}
+
+			add_submenu_page(
+				self::PAGE_SLUG,
+				esc_html( isset( $section['title'] ) ? $section['title'] : $group ),
+				esc_html( isset( $section['title'] ) ? $section['title'] : $group ),
+				'manage_options',
+				self::group_page_slug( $group ),
+				function () use ( $group ) {
+					$this->render_group( $group );
+				}
+			);
+		}
 
 		add_submenu_page(
 			self::PAGE_SLUG,
@@ -72,6 +104,14 @@ class SBSK_Settings {
 		}
 
 		foreach ( SBSK_Modules::instance()->enabled() as $id => $module ) {
+			/**
+			 * A feature that is the only one in its group is already shown on the
+			 * group page, so it does not need a second entry of its own.
+			 */
+			if ( count( SBSK_Modules::instance()->in_group( $module['section'] ) ) === 1 ) {
+				continue;
+			}
+
 			if ( empty( $module['admin_page']['title'] ) || empty( $module['admin_page']['render'] ) || ! is_callable( $module['admin_page']['render'] ) ) {
 				continue;
 			}
@@ -222,6 +262,168 @@ class SBSK_Settings {
 	/**
 	 * Updates sub page: version, availability and a manual check.
 	 */
+
+	/**
+	 * The Modules page: one switch per group. A group that is on gets its own
+	 * page in the menu, holding the features that belong to it.
+	 */
+	public function render_groups() {
+		$sections = $this->sections();
+		$states   = SBSK_Modules::instance()->group_states();
+
+		echo '<div class="wrap sbsk-wrap">';
+		$this->render_header( __( 'Site Kit', 'sb-site-kit' ), __( 'Switch on the parts of the kit this site needs. Each one adds its own page below.', 'sb-site-kit' ) );
+
+		if ( isset( $_GET['updated'] ) ) {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'sb-site-kit' ) . '</p></div>';
+		}
+
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<input type="hidden" name="action" value="sbsk_save_groups">';
+		wp_nonce_field( 'sbsk_save_groups' );
+		echo '<section class="sbsk-section"><div class="sbsk-section__head"><h2>' . esc_html__( 'Modules', 'sb-site-kit' ) . '</h2><p>' . esc_html__( 'Each one switched on adds its own page to the menu.', 'sb-site-kit' ) . '</p></div>';
+		echo '<div class="sbsk-grid">';
+
+		foreach ( $sections as $group => $section ) {
+			$modules = SBSK_Modules::instance()->in_group( $group );
+
+			if ( ! $modules ) {
+				continue;
+			}
+
+			$on    = ! empty( $states[ $group ] );
+			$states_of = SBSK_Modules::instance()->get_states();
+
+			$card  = '<div class="sbsk-card' . ( $on ? ' is-on' : '' ) . '">';
+			$card .= '<div class="sbsk-card__head"><h3>' . esc_html( $section['title'] ) . '</h3>';
+			$card .= '<label class="sbsk-switch"><input type="checkbox" name="sbsk_groups[' . esc_attr( $group ) . ']" value="1" ' . checked( $on, true, false ) . '>';
+			$card .= '<span class="sbsk-switch__track"><span class="sbsk-switch__dot"></span></span>';
+			$card .= '<span class="screen-reader-text">' . esc_html( $section['title'] ) . '</span></label></div>';
+			$card .= '<p class="sbsk-card__desc">' . esc_html( $section['description'] ) . '</p>';
+			$card .= '<ul class="sbsk-features">';
+
+			foreach ( $modules as $module_id => $module ) {
+				$lit = $on && ! empty( $states_of[ $module_id ] ) && ! SBSK_Modules::instance()->missing( $module_id ) && ! SBSK_Modules::instance()->unavailable( $module_id );
+
+				// A module can report its own switches, so the list shows what is really on.
+				$parts = ( ! empty( $module['features'] ) && is_callable( $module['features'] ) ) ? (array) call_user_func( $module['features'] ) : [];
+
+				if ( ! $parts ) {
+					$parts = [ [ 'label' => $module['title'], 'on' => true ] ];
+				}
+
+				foreach ( $parts as $part ) {
+					$part_on = $lit && ! empty( $part['on'] );
+
+					$card .= '<li class="' . ( $part_on ? 'is-on' : 'is-off' ) . '"><span class="sbsk-dot"></span>' . esc_html( $part['label'] ) . '</li>';
+				}
+			}
+
+			$card .= '</ul>';
+
+			if ( $on ) {
+				$card .= '<p class="sbsk-card__link"><a href="' . esc_url( admin_url( 'admin.php?page=' . self::group_page_slug( $group ) ) ) . '">' . esc_html__( 'Settings', 'sb-site-kit' ) . '</a></p>';
+			}
+
+			echo $card . '</div>';
+		}
+
+		echo '</div></section>';
+		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ) );
+		echo '</form></div>';
+	}
+
+	/**
+	 * One group page: the features that belong to it, each with its own switch.
+	 * A group whose only feature brings its own page, such as Images, shows that
+	 * page here rather than a list with one card on it.
+	 */
+	public function render_group( $group ) {
+		$sections = $this->sections();
+		$section  = isset( $sections[ $group ] ) ? $sections[ $group ] : [ 'title' => $group, 'description' => '' ];
+		$modules  = SBSK_Modules::instance()->in_group( $group );
+
+		echo '<div class="wrap sbsk-wrap">';
+		$this->render_header( $section['title'], $section['description'] );
+
+		if ( isset( $_GET['updated'] ) ) {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'sb-site-kit' ) . '</p></div>';
+		}
+
+		// A single feature with a page of its own: show that page here.
+		$only = count( $modules ) === 1 ? reset( $modules ) : null;
+
+		if ( $only && ! empty( $only['admin_page']['render'] ) && is_callable( $only['admin_page']['render'] ) ) {
+			call_user_func( $only['admin_page']['render'], $only );
+			echo '</div>';
+
+			return;
+		}
+
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<input type="hidden" name="action" value="sbsk_save">';
+		echo '<input type="hidden" name="sbsk_group" value="' . esc_attr( $group ) . '">';
+		wp_nonce_field( 'sbsk_save' );
+		echo '<div class="sbsk-grid">';
+
+		$states = SBSK_Modules::instance()->get_states();
+
+		foreach ( $modules as $id => $module ) {
+			$this->render_card( $id, $module, $states );
+		}
+
+		echo '</div>';
+		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ) );
+		echo '</form></div>';
+	}
+
+	/** One feature card, with its switch, notes and any settings of its own. */
+	private function render_card( $id, $module, $states ) {
+		$missing = SBSK_Modules::instance()->missing( $id );
+		$blocked = SBSK_Modules::instance()->unavailable( $id );
+		$on      = ! empty( $states[ $id ] ) && ! $missing && ! $blocked;
+
+		printf(
+			'<div class="sbsk-card%1$s%2$s"><div class="sbsk-card__head"><h3>%3$s</h3><label class="sbsk-switch"><input type="checkbox" name="sbsk_modules[%4$s]" value="1" %5$s %6$s><span class="sbsk-switch__track"><span class="sbsk-switch__dot"></span></span><span class="screen-reader-text">%3$s</span></label></div>',
+			$on ? ' is-on' : '',
+			( $missing || $blocked ) ? ' is-unavailable' : '',
+			esc_html( $module['title'] ),
+			esc_attr( $id ),
+			checked( $on, true, false ),
+			disabled( (bool) $missing || (bool) $blocked, true, false )
+		);
+
+		if ( $blocked ) {
+			echo '<p class="sbsk-card__needs">' . esc_html( $blocked ) . '</p>';
+		}
+
+		if ( $missing ) {
+			printf(
+				'<p class="sbsk-card__needs">' . esc_html__( 'Needs %s installed and active.', 'sb-site-kit' ) . '</p>',
+				esc_html( implode( ' and ', $missing ) )
+			);
+		}
+
+		if ( $module['description'] ) {
+			echo '<p class="sbsk-card__desc">' . esc_html( $module['description'] ) . '</p>';
+		}
+
+		if ( ! $missing && ! $blocked && ! empty( $module['settings'] ) ) {
+			echo '<div class="sbsk-card__settings">';
+
+			foreach ( $module['settings'] as $key => $field ) {
+				$this->render_field( $id, $key, $field );
+			}
+
+			echo '</div>';
+		}
+
+		if ( $on && ! empty( $module['admin_page']['title'] ) ) {
+			echo '<p class="sbsk-card__link"><a href="' . esc_url( admin_url( 'admin.php?page=' . self::module_page_slug( $id ) ) ) . '">' . esc_html__( 'Settings', 'sb-site-kit' ) . '</a></p>';
+		}
+
+		echo '</div>';
+	}
 	public function render_updates_page() {
 		echo '<div class="wrap sbsk-wrap">';
 		$this->render_header( __( 'Updates', 'sb-site-kit' ) );
@@ -237,6 +439,10 @@ class SBSK_Settings {
 		$this->render_header( __( 'Publishing', 'sb-site-kit' ) );
 		do_action( 'sbsk_settings_after' );
 		echo '</div>';
+	}
+
+	public static function group_page_slug( $group ) {
+		return self::PAGE_SLUG . '-' . sanitize_key( $group );
 	}
 
 	public static function module_page_slug( $id ) {
@@ -301,6 +507,27 @@ class SBSK_Settings {
 		wp_enqueue_script( 'sbsk-admin', SBSK_URL . 'assets/js/admin.js', [ 'jquery' ], $js_ver, true );
 	}
 
+
+	/** Save the group switches from the Modules page. */
+	public function save_groups() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do that.', 'sb-site-kit' ) );
+		}
+
+		check_admin_referer( 'sbsk_save_groups' );
+
+		$posted = isset( $_POST['sbsk_groups'] ) ? (array) wp_unslash( $_POST['sbsk_groups'] ) : [];
+		$states = [];
+
+		foreach ( array_keys( $this->sections() ) as $group ) {
+			$states[ $group ] = empty( $posted[ $group ] ) ? 0 : 1;
+		}
+
+		update_option( SBSK_Modules::GROUPS_OPTION, $states );
+
+		wp_safe_redirect( add_query_arg( [ 'page' => self::PAGE_SLUG, 'updated' => 'true' ], admin_url( 'admin.php' ) ) );
+		exit;
+	}
 	public function save() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to do that.', 'sb-site-kit' ) );
@@ -308,7 +535,8 @@ class SBSK_Settings {
 
 		check_admin_referer( 'sbsk_save' );
 
-		$modules   = SBSK_Modules::instance()->switchable();
+		$group     = isset( $_POST['sbsk_group'] ) ? sanitize_key( wp_unslash( $_POST['sbsk_group'] ) ) : '';
+		$modules   = $group !== '' ? SBSK_Modules::instance()->in_group( $group ) : SBSK_Modules::instance()->switchable();
 		$saved     = (array) get_option( SBSK_OPTION, [] );
 		$submitted = isset( $_POST['sbsk_modules'] ) ? (array) wp_unslash( $_POST['sbsk_modules'] ) : [];
 		$states    = [];
@@ -347,7 +575,7 @@ class SBSK_Settings {
 		wp_safe_redirect(
 			add_query_arg(
 				[
-					'page'    => self::PAGE_SLUG,
+					'page'    => $group !== '' ? self::group_page_slug( $group ) : self::PAGE_SLUG,
 					'updated' => 'true',
 				],
 				admin_url( 'admin.php' )
@@ -426,21 +654,17 @@ class SBSK_Settings {
 
 	public function sections() {
 		$sections = [
-			'styling'    => [
-				'title'       => __( 'Styling', 'sb-site-kit' ),
-				'description' => __( 'Base CSS used across the site.', 'sb-site-kit' ),
-			],
 			'content'    => [
 				'title'       => __( 'Content', 'sb-site-kit' ),
 				'description' => __( 'Shortcodes, fields and editor tools.', 'sb-site-kit' ),
 			],
+			'images'     => [
+				'title'       => __( 'Images', 'sb-site-kit' ),
+				'description' => __( 'Image sizes, tidy titles and alt text, and rebuilding.', 'sb-site-kit' ),
+			],
 			'admin'      => [
 				'title'       => __( 'Admin Settings', 'sb-site-kit' ),
 				'description' => __( 'How the WordPress admin looks and who gets to use it.', 'sb-site-kit' ),
-			],
-			'extras'     => [
-				'title'       => __( 'Extras', 'sb-site-kit' ),
-				'description' => __( 'Everything else.', 'sb-site-kit' ),
 			],
 		];
 

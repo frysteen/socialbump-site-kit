@@ -17,6 +17,9 @@ class SBSK_Images_Tools {
 		add_action( 'wp_ajax_sbsk_images_count', [ __CLASS__, 'ajax_count' ] );
 		add_action( 'wp_ajax_sbsk_images_batch', [ __CLASS__, 'ajax_batch' ] );
 		add_action( 'wp_ajax_sbsk_images_single', [ __CLASS__, 'ajax_single' ] );
+		add_action( 'wp_ajax_sbsk_images_report', [ __CLASS__, 'ajax_report' ] );
+		add_action( 'wp_ajax_sbsk_images_orphans', [ __CLASS__, 'ajax_orphans' ] );
+		add_action( 'wp_ajax_sbsk_images_orphan_one', [ __CLASS__, 'ajax_orphan_one' ] );
 		add_filter( 'attachment_fields_to_edit', [ __CLASS__, 'attachment_field' ], 20, 2 );
 	}
 
@@ -26,12 +29,25 @@ class SBSK_Images_Tools {
 		}
 	}
 
-	/** Every image in the library, oldest first so batching is stable. */
+	/**
+	 * The file types thumbnails can actually be made from.
+	 *
+	 * An SVG scales on its own and a PDF is not an image, so neither takes part in
+	 * any of this. Counting them would only make the numbers look wrong.
+	 */
+	public static function mime_types() {
+		return (array) apply_filters(
+			'sbsk/images/mime_types',
+			[ 'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif' ]
+		);
+	}
+
+	/** Every image we can work on, oldest first so batching is stable. */
 	private static function ids() {
 		return get_posts(
 			[
 				'post_type'      => 'attachment',
-				'post_mime_type' => 'image',
+				'post_mime_type' => self::mime_types(),
 				'post_status'    => 'inherit',
 				'posts_per_page' => -1,
 				'orderby'        => 'ID',
@@ -40,6 +56,13 @@ class SBSK_Images_Tools {
 				'no_found_rows'  => true,
 			]
 		);
+	}
+
+	/** Everything in the library that calls itself an image, SVGs included. */
+	private static function library_total() {
+		global $wpdb;
+
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type LIKE 'image/%'" );
 	}
 
 	public static function summary() {
@@ -61,6 +84,8 @@ class SBSK_Images_Tools {
 
 		return [
 			'total'   => count( $ids ),
+			'library' => self::library_total(),
+			'skipped' => max( 0, self::library_total() - count( $ids ) ),
 			'missing' => $missing,
 			'stale'   => $stale,
 		];
@@ -81,11 +106,27 @@ class SBSK_Images_Tools {
 		$removed = 0;
 		$files   = 0;
 
+		$mode = isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : 'build';
+
 		foreach ( $ids as $id ) {
-			$result   = SBSK_Images_Rebuild::process( $id, $force );
-			$built   += count( $result['built'] );
-			$removed += count( $result['removed'] );
-			$files   += (int) $result['files'];
+			if ( $mode === 'clean' ) {
+				$result   = SBSK_Images_Rebuild::clean( $id );
+				$removed += count( $result['removed'] );
+				$files   += (int) $result['files'];
+
+				continue;
+			}
+
+			if ( $force ) {
+				$result   = SBSK_Images_Rebuild::process( $id, true );
+				$built   += count( $result['built'] );
+				$removed += count( $result['removed'] );
+				$files   += (int) $result['files'];
+
+				continue;
+			}
+
+			$built += count( SBSK_Images_Rebuild::build( $id ) );
 		}
 
 		wp_send_json_success(
@@ -114,6 +155,139 @@ class SBSK_Images_Tools {
 	}
 
 	/** Our sizes for one image, marking any that are absent. */
+
+	/** A plain summary of the library, so there is something to decide from. */
+	public static function ajax_report() {
+		self::guard();
+
+		require_once __DIR__ . '/class-sbsk-images-orphans.php';
+
+		$summary = self::summary();
+		$orphans = SBSK_Images_Orphans::find();
+		$stale   = 0;
+		$missing = 0;
+
+		$stale_names = [];
+		$stale_files = 0;
+
+		foreach ( self::ids() as $id ) {
+			$meta     = (array) wp_get_attachment_metadata( $id );
+			$missing += count( SBSK_Images_Rebuild::missing( $id, $meta ) );
+			$names        = SBSK_Images_Rebuild::stale( $id, $meta );
+			$stale       += count( $names );
+			$stale_files += SBSK_Images_Rebuild::stale_files( $id, $meta );
+
+			foreach ( $names as $name ) {
+				$stale_names[ $name ] = true;
+			}
+		}
+
+		$base  = trailingslashit( wp_upload_dir()['basedir'] );
+		$stats = [];
+		$stats[] = [ 'label' => __( 'Images with thumbnails', 'sb-site-kit' ), 'value' => number_format_i18n( $summary['total'] ), 'tone' => 'plain', 'note' => $summary['skipped'] ? sprintf( _n( '%s SVG or similar skipped', '%s SVGs and similar skipped', $summary['skipped'], 'sb-site-kit' ), number_format_i18n( $summary['skipped'] ) ) : '' ];
+		$stats[] = [ 'label' => __( 'Sizes to build', 'sb-site-kit' ), 'value' => number_format_i18n( $missing ), 'tone' => $missing ? 'warn' : 'good', 'note' => sprintf( _n( 'across %s image', 'across %s images', $summary['missing'], 'sb-site-kit' ), number_format_i18n( $summary['missing'] ) ) ];
+		$stats[] = [ 'label' => __( 'Old thumbnails to clear', 'sb-site-kit' ), 'value' => number_format_i18n( $stale_files ), 'tone' => $stale_files ? 'warn' : 'good', 'note' => sprintf( __( '%1$s across %2$s', 'sb-site-kit' ), sprintf( _n( '%s removed size', '%s removed sizes', count( $stale_names ), 'sb-site-kit' ), number_format_i18n( count( $stale_names ) ) ), sprintf( _n( '%s image', '%s images', $summary['stale'], 'sb-site-kit' ), number_format_i18n( $summary['stale'] ) ) ) ];
+		$stats[] = [ 'label' => __( 'Orphaned images', 'sb-site-kit' ), 'value' => number_format_i18n( count( $orphans['files'] ) ), 'tone' => $orphans['files'] ? 'warn' : 'good', 'note' => size_format( $orphans['bytes'] ) ];
+
+		$html = '<div class="sbsk-stats">';
+
+		foreach ( $stats as $stat ) {
+			$html .= '<div class="sbsk-stat is-' . esc_attr( $stat['tone'] ) . '">';
+			$html .= '<span class="sbsk-stat__value">' . esc_html( $stat['value'] ) . '</span>';
+			$html .= '<span class="sbsk-stat__label">' . esc_html( $stat['label'] ) . '</span>';
+
+			if ( $stat['note'] !== '' ) {
+				$html .= '<span class="sbsk-stat__note">' . esc_html( $stat['note'] ) . '</span>';
+			}
+
+			$html .= '</div>';
+		}
+
+		$html .= '</div>';
+
+		if ( $orphans['files'] ) {
+			$rows = '';
+
+			foreach ( array_slice( $orphans['files'], 0, 25 ) as $file ) {
+				$relative = str_replace( $base, '', $file['path'] );
+
+				$rows .= '<tr><td>' . esc_html( $relative ) . '</td>';
+				$rows .= '<td class="sbsk-report__size">' . esc_html( size_format( $file['bytes'] ) ) . '</td>';
+				$rows .= '<td class="sbsk-report__action"><button type="button" class="button sbsk-report__delete" data-file="' . esc_attr( $relative ) . '">' . esc_html__( 'Delete', 'sb-site-kit' ) . '</button></td></tr>';
+			}
+
+			$more = count( $orphans['files'] ) - 25;
+
+			if ( $more > 0 ) {
+				$rows .= '<tr><td colspan="3">' . esc_html( number_format_i18n( $more ) . ' ' . __( 'more', 'sb-site-kit' ) ) . '</td></tr>';
+			}
+
+			$html .= '<div class="sbsk-report__orphans">';
+			$html .= '<h3 class="sbsk-report__title">' . esc_html__( 'Orphaned images', 'sb-site-kit' ) . '</h3>';
+			$html .= '<p class="sbsk-report__note">' . esc_html__( 'In the uploads folder and its dated folders. Folders belonging to other plugins are left alone.', 'sb-site-kit' ) . '</p>';
+			$html .= '<table class="sbsk-report"><tbody>' . $rows . '</tbody></table>';
+			$html .= '</div>';
+		}
+
+		wp_send_json_success(
+			[
+				'html'    => $html,
+				'missing' => $missing,
+				'stale'   => $stale_files,
+				'orphans' => count( $orphans['files'] ),
+			]
+		);
+	}
+
+	/** Delete the files nothing refers to. Each one is checked again first. */
+	public static function ajax_orphans() {
+		self::guard();
+
+		require_once __DIR__ . '/class-sbsk-images-orphans.php';
+
+		$found = SBSK_Images_Orphans::find();
+		$paths = wp_list_pluck( $found['files'], 'path' );
+
+		if ( ! $paths ) {
+			$message = __( 'Nothing to clear.', 'sb-site-kit' );
+
+			wp_send_json_success( [ 'removed' => 0, 'message' => $message ] );
+		}
+
+		$result = SBSK_Images_Orphans::remove( $paths );
+
+		$message = sprintf(
+			/* translators: 1: number of files, 2: disk space */
+			__( 'Removed %1$s files and freed %2$s.', 'sb-site-kit' ),
+			number_format_i18n( $result['removed'] ),
+			size_format( $result['bytes'] )
+		);
+
+		wp_send_json_success( [ 'removed' => $result['removed'], 'message' => $message ] );
+	}
+
+	/** Delete a single orphaned file, named relative to the uploads folder. */
+	public static function ajax_orphan_one() {
+		self::guard();
+
+		require_once __DIR__ . '/class-sbsk-images-orphans.php';
+
+		$relative = isset( $_POST['file'] ) ? (string) wp_unslash( $_POST['file'] ) : '';
+		$relative = ltrim( str_replace( [ '..', chr( 0 ) ], '', $relative ), '/' );
+
+		if ( $relative === '' ) {
+			wp_send_json_error( [ 'message' => __( 'No file given.', 'sb-site-kit' ) ], 400 );
+		}
+
+		$path   = trailingslashit( wp_upload_dir()['basedir'] ) . $relative;
+		$result = SBSK_Images_Orphans::remove( [ $path ] );
+
+		if ( $result['removed'] < 1 ) {
+			wp_send_json_error( [ 'message' => __( 'That file was left alone.', 'sb-site-kit' ) ], 400 );
+		}
+
+		wp_send_json_success( [ 'freed' => size_format( $result['bytes'] ) ] );
+	}
 	public static function sizes_list( $id ) {
 		$meta    = (array) wp_get_attachment_metadata( $id );
 		$have    = (array) ( $meta['sizes'] ?? [] );
