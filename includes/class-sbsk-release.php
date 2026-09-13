@@ -441,13 +441,56 @@ class SBSK_Release {
 		return $tag;
 	}
 
+	/**
+	 * A GitHub call that is tried again when GitHub itself falls over.
+	 *
+	 * A 5xx is their end having a moment rather than anything wrong with the
+	 * request, so the same call is worth repeating before giving up on it.
+	 */
+	private function github_retry( $method, $url, $token, $body = null, $headers = [], $tries = 3 ) {
+		$res = null;
+
+		for ( $attempt = 1; $attempt <= $tries; $attempt++ ) {
+			$res = $this->github( $method, $url, $token, $body, $headers );
+
+			if ( $res['code'] > 0 && $res['code'] < 500 ) {
+				return $res;
+			}
+
+			if ( $attempt < $tries ) {
+				sleep( 2 * $attempt );
+			}
+		}
+
+		return $res;
+	}
+
+	/** Whether a release has come out of draft, asked of GitHub rather than assumed. */
+	private function is_published( $token, $release_id ) {
+		$res = $this->github( 'GET', '/repos/' . SBSK_GITHUB_REPO . '/releases/' . (int) $release_id, $token );
+
+		return $res['code'] === 200 && isset( $res['body']['draft'] ) && ! $res['body']['draft'];
+	}
+
+	/** How many files are actually attached to a release. */
+	private function asset_count( $token, $release_id ) {
+		$res = $this->github( 'GET', '/repos/' . SBSK_GITHUB_REPO . '/releases/' . (int) $release_id, $token );
+
+		return ( $res['code'] === 200 && ! empty( $res['body']['assets'] ) ) ? count( (array) $res['body']['assets'] ) : 0;
+	}
+
 	private function abort( $message, $original = null, $zip = '', $token = '', $release_id = 0, $readme_original = null ) {
 		if ( $readme_original !== null ) {
 			file_put_contents( SBSK_PATH . 'readme.txt', $readme_original );
 		}
 
 		if ( $release_id && $token ) {
-			$this->github( 'DELETE', '/repos/' . SBSK_GITHUB_REPO . '/releases/' . (int) $release_id, $token );
+			$deleted = $this->github( 'DELETE', '/repos/' . SBSK_GITHUB_REPO . '/releases/' . (int) $release_id, $token );
+
+			// Say so when the tidy up fails, rather than leaving a draft nobody knows about.
+			if ( (int) $deleted['code'] !== 204 ) {
+				$message .= ' ' . __( 'A draft release was left behind on GitHub and needs deleting by hand.', 'sb-site-kit' );
+			}
 		}
 
 		if ( $original !== null ) {
@@ -588,27 +631,36 @@ class SBSK_Release {
 
 		$release_id = (int) $release['body']['id'];
 		$upload_url = preg_replace( '/\{.*\}$/', '', $release['body']['upload_url'] ) . '?name=' . rawurlencode( self::ASSET_NAME );
-		$upload     = $this->github( 'POST', $upload_url, $token, file_get_contents( $zip ), [ 'Content-Type' => 'application/zip' ] );
+		$upload     = $this->github_retry( 'POST', $upload_url, $token, file_get_contents( $zip ), [ 'Content-Type' => 'application/zip' ] );
 
 		if ( $upload['code'] !== 201 ) {
 			/* translators: %s: GitHub error message */
 			$this->abort( sprintf( __( 'The zip upload to GitHub failed (%s).', 'sb-site-kit' ), $upload['error'] ), $original, $zip, $token, $release_id, $readme_original );
 		}
 
-		$live = $this->github(
-			'PATCH',
-			'/repos/' . SBSK_GITHUB_REPO . '/releases/' . $release_id,
-			$token,
-			[
-				'draft'       => false,
-				'make_latest' => 'true',
-			]
-		);
+		// GitHub can accept an upload and still attach nothing, so ask it what is there.
+		if ( $this->asset_count( $token, $release_id ) < 1 ) {
+			$this->abort( __( 'GitHub took the zip but did not attach it to the release.', 'sb-site-kit' ), $original, $zip, $token, $release_id, $readme_original );
+		}
 
-		if ( $live['code'] !== 200 ) {
+		/**
+		 * Publishing happens on its own. GitHub rejects make_latest while a release
+		 * is still a draft, and sending both at once is what it trips over.
+		 */
+		$live = $this->github_retry( 'PATCH', '/repos/' . SBSK_GITHUB_REPO . '/releases/' . $release_id, $token, [ 'draft' => false ] );
+
+		/**
+		 * A 500 here does not mean nothing happened. GitHub has published a release
+		 * and then failed the response before now, so ask before undoing one that
+		 * actually went out.
+		 */
+		if ( $live['code'] !== 200 && ! $this->is_published( $token, $release_id ) ) {
 			/* translators: %s: GitHub error message */
 			$this->abort( sprintf( __( 'GitHub would not publish the release (%s).', 'sb-site-kit' ), $live['error'] ), $original, $zip, $token, $release_id, $readme_original );
 		}
+
+		// Only once it is out of draft can it be marked as the latest release.
+		$this->github_retry( 'PATCH', '/repos/' . SBSK_GITHUB_REPO . '/releases/' . $release_id, $token, [ 'make_latest' => 'true' ] );
 
 		wp_delete_file( $zip );
 		set_transient( self::LATEST_CACHE, $version, 5 * MINUTE_IN_SECONDS );
