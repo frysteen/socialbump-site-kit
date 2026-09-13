@@ -15,40 +15,53 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class SBSK_Images_Orphans {
 
-	/** Every file path referenced by an attachment, as a lookup. */
+	/**
+	 * Every file path an attachment refers to.
+	 *
+	 * Attachments are paired up by id so the folder can come from the attached
+	 * file when the metadata has no path of its own. PDFs are like that: their
+	 * preview images are listed as sizes with no file entry above them.
+	 */
 	public static function known() {
 		global $wpdb;
 
 		$uploads = wp_upload_dir();
 		$base    = trailingslashit( $uploads['basedir'] );
 		$known   = [];
+		$files   = [];
+		$metas   = [];
 
-		$rows = $wpdb->get_col( "SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file'" );
+		$rows = $wpdb->get_results( "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE meta_key IN ( '_wp_attached_file', '_wp_attachment_metadata' )" );
 
-		foreach ( $rows as $relative ) {
-			$known[ $base . $relative ] = true;
-			$known[ $base . $relative . '.webp' ] = true;
-		}
-
-		$metas = $wpdb->get_col( "SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attachment_metadata'" );
-
-		foreach ( $metas as $meta ) {
-			$meta = maybe_unserialize( $meta );
-
-			if ( ! is_array( $meta ) || empty( $meta['file'] ) ) {
+		foreach ( $rows as $row ) {
+			if ( $row->meta_key === '_wp_attached_file' ) {
+				$files[ $row->post_id ] = $row->meta_value;
 				continue;
 			}
 
-			$sub    = dirname( $meta['file'] );
+			$metas[ $row->post_id ] = maybe_unserialize( $row->meta_value );
+		}
+
+		foreach ( array_keys( $files + $metas ) as $id ) {
+			$attached = isset( $files[ $id ] ) ? $files[ $id ] : '';
+			$meta     = isset( $metas[ $id ] ) && is_array( $metas[ $id ] ) ? $metas[ $id ] : [];
+			$relative = ! empty( $meta['file'] ) ? $meta['file'] : $attached;
+
+			if ( $relative === '' ) {
+				continue;
+			}
+
+			self::add( $known, $base . $relative );
+
+			if ( $attached !== '' ) {
+				self::add( $known, $base . $attached );
+			}
+
+			$sub    = dirname( $relative );
 			$folder = ( $sub === '.' || $sub === '' ) ? $base : trailingslashit( $base . $sub );
 
-			$known[ $base . $meta['file'] ] = true;
-			$known[ $base . $meta['file'] . '.webp' ] = true;
-
-			// The full sized original kept when WordPress scales a large upload.
 			if ( ! empty( $meta['original_image'] ) ) {
-				$known[ $folder . $meta['original_image'] ] = true;
-				$known[ $folder . $meta['original_image'] . '.webp' ] = true;
+				self::add( $known, $folder . $meta['original_image'] );
 			}
 
 			foreach ( (array) ( $meta['sizes'] ?? [] ) as $size ) {
@@ -56,19 +69,43 @@ class SBSK_Images_Orphans {
 					continue;
 				}
 
-				$known[ $folder . $size['file'] ] = true;
-				$known[ $folder . $size['file'] . '.webp' ] = true;
+				self::add( $known, $folder . $size['file'] );
 			}
 		}
 
 		return $known;
 	}
 
-
+	/** Note a file and the WebP an optimiser may have written beside it. */
+	private static function add( array &$known, $path ) {
+		$known[ $path ]            = true;
+		$known[ $path . '.webp' ] = true;
+	}
 	/**
 	 * Files that live in uploads but are not uploads: index files WordPress drops
 	 * in to stop directory listings, server config, and anything hidden.
 	 */
+	/**
+	 * Only picture files are ever treated as orphans. Plenty of plugins keep data
+	 * in the uploads folder, a geolocation database or an export for instance,
+	 * and none of that is ours to tidy up.
+	 */
+	public static function is_image_file( $path ) {
+		$allowed = (array) apply_filters(
+			'sbsk/orphans/extensions',
+			[ 'jpg', 'jpeg', 'jpe', 'png', 'gif', 'webp', 'avif' ]
+		);
+
+		$name = strtolower( basename( $path ) );
+
+		// A WebP written by an optimiser keeps the original extension in front of it.
+		$name = preg_replace( '/\.webp$/', '', $name );
+
+		$extension = pathinfo( $name, PATHINFO_EXTENSION );
+
+		return in_array( $extension, $allowed, true );
+	}
+
 	public static function is_protected( $path ) {
 		$name = basename( $path );
 
@@ -116,7 +153,7 @@ class SBSK_Images_Orphans {
 
 		foreach ( self::folders() as $folder ) {
 			foreach ( (array) glob( $folder . '/*' ) as $path ) {
-				if ( ! is_file( $path ) || isset( $known[ $path ] ) || self::is_protected( $path ) ) {
+				if ( ! is_file( $path ) || isset( $known[ $path ] ) || self::is_protected( $path ) || ! self::is_image_file( $path ) ) {
 					continue;
 				}
 
@@ -152,7 +189,7 @@ class SBSK_Images_Orphans {
 				continue;
 			}
 
-			if ( self::is_protected( $path ) ) {
+			if ( self::is_protected( $path ) || ! self::is_image_file( $path ) ) {
 				continue;
 			}
 
