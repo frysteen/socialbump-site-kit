@@ -350,8 +350,8 @@
 
 				clearOrphans( 0, 0, 0 );
 			} );
-			} );
 		}
+
 		// Attachment details: rebuild one image.
 		$( document ).on( 'click', '.sbsk-regenerate', function () {
 			var $button = $( this );
