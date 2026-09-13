@@ -17,6 +17,7 @@ class SBSK_Release {
 	const LATEST_CACHE  = 'sbsk_latest_release';
 	const NOTICE_PREFIX = 'sbsk_release_notice_';
 	const ASSET_NAME    = 'socialbump-site-kit.zip';
+	const CHANGES_OPTION = 'sbsk_pending_changes';
 
 	public static function instance() {
 		if ( self::$instance === null ) {
@@ -479,6 +480,30 @@ class SBSK_Release {
 		return ( $res['code'] === 200 && ! empty( $res['body']['assets'] ) ) ? count( (array) $res['body']['assets'] ) : 0;
 	}
 
+	/**
+	 * Changes noted since the last release, ready for the notes box.
+	 */
+	public static function pending_changes() {
+		$list = (array) get_option( self::CHANGES_OPTION, [] );
+
+		return array_values( array_filter( array_map( 'strval', $list ), 'strlen' ) );
+	}
+
+	/** The same list as plain text, one change per line. */
+	public static function changes_text() {
+		$lines = [];
+
+		foreach ( self::pending_changes() as $change ) {
+			$lines[] = '- ' . $change;
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	/** Start a fresh list, once a release has gone out. */
+	public static function clear_changes() {
+		delete_option( self::CHANGES_OPTION );
+	}
 	private function abort( $message, $original = null, $zip = '', $token = '', $release_id = 0, $readme_original = null ) {
 		if ( $readme_original !== null ) {
 			file_put_contents( SBSK_PATH . 'readme.txt', $readme_original );
@@ -663,6 +688,7 @@ class SBSK_Release {
 		$this->github_retry( 'PATCH', '/repos/' . SBSK_GITHUB_REPO . '/releases/' . $release_id, $token, [ 'make_latest' => 'true' ] );
 
 		wp_delete_file( $zip );
+		self::clear_changes();
 		set_transient( self::LATEST_CACHE, $version, 5 * MINUTE_IN_SECONDS );
 
 		$url = ! empty( $live['body']['html_url'] ) ? $live['body']['html_url'] : 'https://github.com/' . SBSK_GITHUB_REPO . '/releases';
@@ -710,6 +736,7 @@ class SBSK_Release {
 		$parts   = array_map( 'intval', explode( '.', $current . '.0.0' ) );
 		$suggest = $parts[0] . '.' . $parts[1] . '.' . ( $parts[2] + 1 );
 		$repo    = 'https://github.com/' . SBSK_GITHUB_REPO;
+		$changes = self::pending_changes();
 
 		if ( $notice ) {
 			delete_transient( self::NOTICE_PREFIX . get_current_user_id() );
@@ -769,7 +796,15 @@ class SBSK_Release {
 						<label for="sbsk_version"><?php esc_html_e( 'New version number', 'sb-site-kit' ); ?></label>
 						<input type="text" id="sbsk_version" name="sbsk_version" value="<?php echo esc_attr( $suggest ); ?>" pattern="\d+\.\d+\.\d+" required>
 						<label for="sbsk_notes"><?php esc_html_e( 'What changed (optional)', 'sb-site-kit' ); ?></label>
-						<textarea id="sbsk_notes" name="sbsk_notes" rows="4"></textarea>
+						<textarea id="sbsk_notes" name="sbsk_notes" rows="<?php echo esc_attr( max( 4, min( 12, count( $changes ) + 1 ) ) ); ?>"><?php echo esc_textarea( self::changes_text() ); ?></textarea>
+						<?php if ( $changes ) : ?>
+							<p class="sbsk-card__desc">
+								<?php
+								/* translators: %s: number of changes */
+								printf( esc_html( _n( 'Filled in from %s change noted since the last release. Edit it before publishing if you like.', 'Filled in from %s changes noted since the last release. Edit it before publishing if you like.', count( $changes ), 'sb-site-kit' ) ), esc_html( number_format_i18n( count( $changes ) ) ) );
+								?>
+							</p>
+						<?php endif; ?>
 						<div class="sbsk-release__actions">
 							<button type="submit" class="button button-primary" <?php disabled( $token === '' ); ?> onclick="return confirm('Publish version ' + this.form.sbsk_version.value + ' to every site running this plugin?');"><?php esc_html_e( 'Publish release', 'sb-site-kit' ); ?></button>
 						</div>

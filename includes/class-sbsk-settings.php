@@ -25,6 +25,9 @@ class SBSK_Settings {
 		add_action( 'admin_post_sbsk_save', [ $this, 'save' ] );
 		add_action( 'admin_post_sbsk_save_groups', [ $this, 'save_groups' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'styles' ] );
+		add_action( 'admin_bar_menu', [ $this, 'admin_bar' ], 100 );
+		add_action( 'admin_head', [ $this, 'bar_styles' ] );
+		add_action( 'wp_head', [ $this, 'bar_styles' ] );
 	}
 
 	/**
@@ -441,6 +444,89 @@ class SBSK_Settings {
 		echo '</div>';
 	}
 
+	/**
+	 * A shortcut in the admin bar, listing the same sub pages as the menu.
+	 */
+	public function admin_bar( $bar ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$items = $this->bar_items();
+
+		// Which of our pages is open, if any. Nothing is current on the front end.
+		$page    = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		$current = isset( $items[ $page ] ) ? $page : '';
+
+		$bar->add_node(
+			[
+				'id'    => 'sbsk',
+				'title' => esc_html__( 'SB Site Kit', 'sb-site-kit' ),
+				'href'  => admin_url( 'admin.php?page=' . self::PAGE_SLUG ),
+				'meta'  => [ 'class' => $current !== '' ? 'sb-bar-current' : '' ],
+			]
+		);
+
+		foreach ( $items as $slug => $title ) {
+			$bar->add_node(
+				[
+					'id'     => 'sbsk-bar-' . sanitize_key( $slug ),
+					'parent' => 'sbsk',
+					'title'  => esc_html( $title ),
+					'href'   => admin_url( 'admin.php?page=' . $slug ),
+					'meta'   => [ 'class' => $slug === $current ? 'sb-bar-current' : '' ],
+				]
+			);
+		}
+	}
+
+	/**
+	 * Marks the page you are on in the admin bar shortcut.
+	 *
+	 * Printed rather than enqueued, because the bar also shows on the front end
+	 * where the plugin admin stylesheet is not loaded.
+	 */
+	public function bar_styles() {
+		if ( ! is_admin_bar_showing() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		// The accent from whichever admin colour scheme the user has chosen.
+		$accent = $this->accent_colour();
+
+		echo '<style>#wpadminbar .sb-bar-current > .ab-item{color:' . esc_attr( $accent ) . ';font-weight:600;}</style>';
+	}
+
+	/** The pages the admin bar shortcut lists, in menu order. */
+	private function bar_items() {
+		$sections = $this->sections();
+		$items    = [ self::PAGE_SLUG => __( 'Modules', 'sb-site-kit' ) ];
+
+		foreach ( SBSK_Modules::instance()->group_states() as $group => $on ) {
+			if ( ! $on || ! SBSK_Modules::instance()->in_group( $group ) ) {
+				continue;
+			}
+
+			$items[ self::group_page_slug( $group ) ] = isset( $sections[ $group ]['title'] ) ? $sections[ $group ]['title'] : $group;
+		}
+
+		// A module with a page of its own, unless its group page already is that page.
+		foreach ( SBSK_Modules::instance()->enabled() as $id => $module ) {
+			if ( empty( $module['admin_page']['title'] ) || count( SBSK_Modules::instance()->in_group( $module['section'] ) ) === 1 ) {
+				continue;
+			}
+
+			$items[ self::module_page_slug( $id ) ] = $module['admin_page']['title'];
+		}
+
+		$items[ self::PAGE_SLUG . '-updates' ] = __( 'Updates', 'sb-site-kit' );
+
+		if ( function_exists( 'sbsk_is_hub' ) && sbsk_is_hub() ) {
+			$items[ self::PAGE_SLUG . '-publishing' ] = __( 'Publishing', 'sb-site-kit' );
+		}
+
+		return $items;
+	}
 	public static function group_page_slug( $group ) {
 		return self::PAGE_SLUG . '-' . sanitize_key( $group );
 	}

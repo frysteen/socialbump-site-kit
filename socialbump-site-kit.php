@@ -3,7 +3,7 @@
  * Plugin Name: SocialBUMP Site Kit
  * Plugin URI:  https://socialbump.com.au
  * Description: SocialBUMP base styling, ACF fields, shortcodes and admin tweaks. Switch each feature on or off under SB Site Kit.
- * Version:     0.4.2
+ * Version:     0.4.3
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author:      SocialBUMP
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SBSK_VERSION', '0.4.2' );
+define( 'SBSK_VERSION', '0.4.3' );
 define( 'SBSK_FILE', __FILE__ );
 define( 'SBSK_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SBSK_URL', plugin_dir_url( __FILE__ ) );
@@ -95,6 +95,29 @@ function sbsk_is_hub() {
 	return strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) === SBSK_HUB_HOST;
 }
 
+/**
+ * Note a change for the next release.
+ *
+ * Anything logged here fills in the notes box on the Publishing page, and the
+ * list is emptied once a release goes out.
+ */
+function sbsk_log_change( $text ) {
+	$text = trim( wp_strip_all_tags( (string) $text ) );
+
+	if ( $text === '' ) {
+		return;
+	}
+
+	$list = (array) get_option( 'sbsk_pending_changes', [] );
+
+	if ( in_array( $text, $list, true ) ) {
+		return;
+	}
+
+	$list[] = $text;
+
+	update_option( 'sbsk_pending_changes', array_slice( $list, -50 ), false );
+}
 /**
  * Load the plugin. Unlike Bricks Tweaks this has no theme requirement:
  * a module that needs Bricks, ACF or WooCommerce declares it in 'requires'.
