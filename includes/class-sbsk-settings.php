@@ -439,6 +439,7 @@ class SBSK_Settings {
 		echo '<div class="wrap sbsk-wrap">';
 		$this->render_header( __( 'Updates', 'sb-site-kit' ) );
 		SBSK_Updates::render();
+		SBSK_Transfer::render();
 		echo '</div>';
 	}
 
@@ -641,7 +642,10 @@ class SBSK_Settings {
 		$modules   = $group !== '' ? SBSK_Modules::instance()->in_group( $group ) : SBSK_Modules::instance()->switchable();
 		$saved     = (array) get_option( SBSK_OPTION, [] );
 		$submitted = isset( $_POST['sbsk_modules'] ) ? (array) wp_unslash( $_POST['sbsk_modules'] ) : [];
-		$states    = [];
+
+		// One group's page only submits its own modules, so start from everything
+		// already saved. Otherwise saving one page would wipe every other group.
+		$states = $saved;
 
 		foreach ( $modules as $id => $module ) {
 			// A greyed out module can't be changed here, so keep whatever it was set to before.
