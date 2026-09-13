@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.3.4
+Stable tag: 0.3.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 0.3.5 =
+* Change: a new thumbnail follows whichever naming most of the existing thumbnails use, rather than the first one it happens to find.
+
 = 0.3.4 =
 * Change: a file whose name matches an image still in the library is never treated as an orphan, even when its metadata is incomplete. A large upload keeps its untouched original alongside the scaled copy, and that note is sometimes missing.
 

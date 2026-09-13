@@ -302,6 +302,8 @@ class SBSK_Images_Rebuild {
 	 * add in step with what is already there.
 	 */
 	public static function base_name( $id, array $meta ) {
+		$counts = [];
+
 		foreach ( (array) ( $meta['sizes'] ?? [] ) as $size ) {
 			if ( empty( $size['file'] ) ) {
 				continue;
@@ -310,9 +312,18 @@ class SBSK_Images_Rebuild {
 			$name = pathinfo( $size['file'], PATHINFO_FILENAME );
 			$name = preg_replace( '/-\d+x\d+$/', '', $name );
 
-			if ( $name !== '' ) {
-				return $name;
+			if ( $name === '' ) {
+				continue;
 			}
+
+			$counts[ $name ] = isset( $counts[ $name ] ) ? $counts[ $name ] + 1 : 1;
+		}
+
+		// Whichever naming most of the thumbnails already use.
+		if ( $counts ) {
+			arsort( $counts );
+
+			return (string) array_key_first( $counts );
 		}
 
 		// Nothing to copy, so fall back to the original upload if there is one.
