@@ -101,7 +101,26 @@
 			} );
 
 			$widths.on( 'input', 'input[type="number"]', function () {
-				$( this ).closest( '.sbsk-width' ).find( '.sbsk-width__value' ).text( this.value );
+				var $row  = $( this ).closest( '.sbsk-width' );
+				var value = this.value;
+
+				$row.find( '.sbsk-width__value' ).text( value );
+
+				// Flag a width that is already in the list rather than silently merging it.
+				var seen = 0;
+
+				$widths.find( 'input[type="number"]' ).each( function () {
+					if ( this.value !== '' && this.value === value ) {
+						seen++;
+					}
+				} );
+
+				$row.toggleClass( 'is-duplicate', seen > 1 );
+				$row.find( '.sbsk-width__dupe' ).remove();
+
+				if ( seen > 1 ) {
+					$row.find( '.sbsk-width__name' ).after( '<span class="sbsk-width__dupe">already in the list</span>' );
+				}
 			} );
 		}
 
@@ -121,6 +140,7 @@
 			var $bar    = $barWrap.find( 'span' );
 			var totals  = { built: 0, removed: 0, files: 0 };
 			var lastMissing = 0;
+			var lastOrphans = 0;
 			var nonce   = $rebuild.data( 'nonce' );
 
 			function buttons( on ) {
@@ -150,9 +170,10 @@
 
 					$panel.prop( 'hidden', false ).html( data.html );
 					lastMissing = data.missing;
-					$build.prop( 'disabled', data.missing < 1 && ! $( '#sbsk-rebuild-force' ).prop( 'checked' ) );
+					$build.prop( 'hidden', false ).prop( 'disabled', data.missing < 1 && ! $( '#sbsk-rebuild-force' ).prop( 'checked' ) );
 					$clean.prop( 'hidden', data.stale < 1 );
-					$orphan.prop( 'hidden', data.orphans < 1 );
+					lastOrphans = ( typeof data.deletable === 'number' ) ? data.deletable : data.orphans;
+					$orphan.prop( 'hidden', lastOrphans < 1 );
 					$force.prop( 'hidden', false );
 					$scan.text( 'Scan again' );
 				} );
@@ -176,6 +197,11 @@
 					$bar.css( 'width', ( total ? Math.round( ( done / total ) * 100 ) : 100 ) + '%' );
 					$status.text( done + ' of ' + total + ' checked.' );
 
+					if ( data.last && data.last.thumb ) {
+						$( '#sbsk-progress-thumb' ).html( '<img src="' + data.last.thumb + '" alt="">' );
+						$status.text( done + ' of ' + total + ' checked. ' + data.last.name );
+					}
+
 					if ( data.done || done >= total ) {
 						$status.text( 'Finished. ' + totals.built + ' sizes built, ' + totals.files + ' files removed.' );
 						scan( true );
@@ -196,6 +222,7 @@
 				$progress.prop( 'hidden', false );
 				$bar.css( 'width', '0%' );
 				$status.text( 'Working...' );
+				$( '#sbsk-progress-thumb' ).empty();
 
 				$.post( ajaxurl, { action: 'sbsk_images_count', nonce: nonce } ).done( function ( response ) {
 					var total = ( response && response.success ) ? response.data.total : 0;
@@ -212,6 +239,21 @@
 
 			$( '#sbsk-rebuild-force' ).on( 'change', function () {
 				$build.prop( 'disabled', ! this.checked && lastMissing < 1 );
+			} );
+
+			$panel.on( 'click', '#sbsk-show-all', function () {
+				$panel.find( 'tr.is-extra' ).removeClass( 'is-extra' );
+				$( this ).closest( 'tr' ).remove();
+			} );
+
+			$panel.on( 'click', '.sbsk-report__keep', function () {
+				var $button = $( this );
+
+				$button.prop( 'disabled', true );
+
+				$.post( ajaxurl, { action: 'sbsk_images_keep', nonce: nonce, file: $button.data( 'file' ), keep: $button.data( 'keep' ) } ).done( function () {
+					scan( true );
+				} );
 			} );
 
 			$panel.on( 'click', '.sbsk-report__delete', function () {
@@ -262,18 +304,52 @@
 				start( 'clean', false );
 			} );
 
+			function clearOrphans( offset, cleared, freed ) {
+				$.post( ajaxurl, { action: 'sbsk_images_orphans', nonce: nonce, offset: offset } ).done( function ( response ) {
+					if ( ! response || ! response.success ) {
+						$status.text( 'Something went wrong. Nothing else was changed.' );
+						buttons( true );
+						return;
+					}
+
+					var data = response.data;
+
+					cleared += data.removed;
+					freed += data.bytes;
+
+					var seen = Math.min( cleared + data.offset, data.total );
+					var pct  = data.total ? Math.round( ( seen / data.total ) * 100 ) : 100;
+
+					$bar.css( 'width', pct + '%' );
+					$status.text( cleared + ' of ' + data.total + ' removed.' );
+
+					if ( data.done ) {
+						$bar.css( 'width', '100%' );
+						$status.text( 'Finished. ' + cleared + ' files removed, ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed.' );
+						scan( true );
+						return;
+					}
+
+					clearOrphans( data.offset, cleared, freed );
+				} ).fail( function () {
+					$status.text( 'The server did not answer. Nothing else was changed.' );
+					buttons( true );
+				} );
+			}
+
 			$orphan.on( 'click', function () {
-				if ( ! window.confirm( 'Delete the files in the uploads folders that no image in the library refers to? This cannot be undone.' ) ) {
+				if ( ! window.confirm( 'Confirm you want to delete ' + lastOrphans + ' orphaned image' + ( lastOrphans === 1 ? '' : 's' ) + '. This cannot be undone.' ) ) {
 					return;
 				}
 
 				buttons( false );
+				$progress.prop( 'hidden', false );
+				$( '#sbsk-progress-thumb' ).empty();
+				$bar.css( 'width', '0%' );
 				$status.text( 'Clearing...' );
 
-				$.post( ajaxurl, { action: 'sbsk_images_orphans', nonce: nonce } ).done( function ( response ) {
-					$status.text( ( response && response.success ) ? response.data.message : 'Nothing was changed.' );
-					scan( true );
-				} );
+				clearOrphans( 0, 0, 0 );
+			} );
 			} );
 		}
 		// Attachment details: rebuild one image.

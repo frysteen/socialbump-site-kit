@@ -881,10 +881,7 @@ table.sbsk-report td:last-child {
 	box-shadow: 0 0 0 1px #fff, 0 0 0 3px #d63638;
 }
 
-table.sbsk-report td.sbsk-report__action {
-	width: 70px;
-	text-align: right;
-}
+
 
 /* Progress, shown only while something is running */
 .sbsk-progress {
@@ -948,4 +945,149 @@ table.sbsk-report td.sbsk-report__action {
 
 .sbsk-rebuild__actions {
 	margin-top: 0;
+}
+
+/* Notes on a width row */
+.sbsk-width__clash,
+.sbsk-width__dupe {
+	font-size: 11px;
+	color: #8a6116;
+	white-space: nowrap;
+}
+
+.sbsk-width__dupe {
+	color: #d63638;
+	font-weight: 600;
+}
+
+.sbsk-width.is-duplicate input[type="number"] {
+	border-color: #d63638;
+}
+
+/* The image being worked on */
+.sbsk-progress__row {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.sbsk-progress__main {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.sbsk-progress__thumb {
+	flex: 0 0 auto;
+	width: 44px;
+	height: 44px;
+}
+
+.sbsk-progress__thumb img {
+	width: 44px;
+	height: 44px;
+	object-fit: cover;
+	border-radius: 4px;
+	background: #fff;
+}
+
+/* Orphan rows: in use, or kept on purpose */
+.sbsk-report__used,
+.sbsk-report__keptflag {
+	display: block;
+	margin-top: 2px;
+	font-size: 11px;
+}
+
+.sbsk-report__used {
+	color: #8a6116;
+}
+
+.sbsk-report__keptflag {
+	color: #00681f;
+}
+
+.wp-core-ui .sbsk-report__keep {
+	min-height: 0;
+	margin-right: 6px;
+	padding: 1px 9px;
+	height: auto;
+	line-height: 1.7;
+	font-size: 11px;
+}
+
+
+
+/* A file being kept on purpose */
+
+
+
+
+/* Orphan table */
+table.sbsk-report {
+	width: 100%;
+	max-width: none;
+	border-collapse: separate;
+	border-spacing: 0;
+}
+
+table.sbsk-report td {
+	padding: 8px 10px;
+	vertical-align: middle;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+table.sbsk-report tr:last-child td {
+	border-bottom: 0;
+}
+
+table.sbsk-report td:first-child {
+	padding-left: 12px;
+	border-left: 3px solid transparent;
+}
+
+table.sbsk-report td.sbsk-report__size {
+	width: 90px;
+	color: #646970;
+	text-align: right;
+	white-space: nowrap;
+}
+
+table.sbsk-report td.sbsk-report__action {
+	width: 1%;
+	white-space: nowrap;
+	text-align: right;
+}
+
+/* Kept on purpose */
+table.sbsk-report tr.is-kept td {
+	background: #fdf8e8;
+}
+
+table.sbsk-report tr.is-kept td:first-child {
+	border-left-color: #dba617;
+}
+
+/* Row buttons, matched so the columns line up */
+.wp-core-ui .sbsk-report__keep,
+.wp-core-ui .sbsk-report__delete {
+	min-width: 96px;
+	min-height: 0;
+	padding: 2px 10px;
+	height: auto;
+	line-height: 1.8;
+	font-size: 12px;
+	text-align: center;
+}
+
+.wp-core-ui .sbsk-report__keep {
+	margin-right: 8px;
+}
+
+/* Files beyond the first 25, until they are asked for */
+table.sbsk-report tr.is-extra {
+	display: none;
+}
+
+table.sbsk-report tr.sbsk-report__morerow td {
+	padding-top: 10px;
 }

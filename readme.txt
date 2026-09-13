@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.3.5
+Stable tag: 0.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,14 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 0.4.0 =
+* Orphaned files are now checked against the site before they can be deleted in bulk. Anything mentioned in a page, a setting or a template is left alone and shown with where it turned up.
+* A file can be marked as one to keep, which shades its row and takes it out of the bulk delete.
+* Every orphan is listed rather than the first 25, so any of them can be kept, with the rest folded behind a button.
+* Orphan file names link to the file, and clearing them runs in batches with a progress bar.
+* The rebuild progress shows the image being worked on.
+* Adding an image size warns about duplicates and refuses a name another plugin has registered.
+
 = 0.3.5 =
 * Change: a new thumbnail follows whichever naming most of the existing thumbnails use, rather than the first one it happens to find.
 

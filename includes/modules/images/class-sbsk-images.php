@@ -159,6 +159,27 @@ class SBSK_Images {
 		}
 
 		$clean = array_values( array_unique( $clean ) );
+
+		// A name another plugin registered is not ours to take over.
+		$taken = [];
+
+		foreach ( $clean as $key => $width ) {
+			$name = 'image-' . $width;
+
+			if ( ! in_array( $name, get_intermediate_image_sizes(), true ) || in_array( $name, SBSK_Images_Rebuild::owned(), true ) ) {
+				continue;
+			}
+
+			$taken[] = $name;
+
+			unset( $clean[ $key ] );
+		}
+
+		$clean = array_values( $clean );
+
+		if ( $taken ) {
+			set_transient( 'sbsk_images_taken_' . get_current_user_id(), $taken, 60 );
+		}
 		sort( $clean );
 
 		$settings           = (array) get_option( SBSK_Modules::SETTINGS_OPTION, [] );
@@ -190,6 +211,17 @@ class SBSK_Images {
 		echo '<div class="sbsk-images">';
 
 		$sizes_on = (bool) self::setting( 'sizes_on', 1 );
+
+		$taken = get_transient( 'sbsk_images_taken_' . get_current_user_id() );
+
+		if ( $taken ) {
+			delete_transient( 'sbsk_images_taken_' . get_current_user_id() );
+
+			$message = __( 'These widths were left out, because another plugin already registers a size with the same name:', 'sb-site-kit' );
+			$message .= ' ' . implode( ', ', (array) $taken );
+
+			echo '<div class="notice notice-warning"><p>' . esc_html( $message ) . '</p></div>';
+		}
 
 		echo '<section class="sbsk-section">';
 		echo '<div class="sbsk-section__head sbsk-section__head--switch">';
@@ -228,12 +260,65 @@ class SBSK_Images {
 		echo '</form>';
 	}
 
+
+	/**
+	 * Sizes registered by anything other than us, with their dimensions.
+	 *
+	 * Used to point out where a width would produce much the same file as a size
+	 * that already exists, and to refuse a name another plugin has taken.
+	 */
+	public static function other_sizes() {
+		global $_wp_additional_image_sizes;
+
+		$sizes = [];
+
+		foreach ( get_intermediate_image_sizes() as $name ) {
+			if ( strpos( $name, 'image-' ) === 0 ) {
+				continue;
+			}
+
+			if ( isset( $_wp_additional_image_sizes[ $name ] ) ) {
+				$sizes[ $name ] = [
+					'width' => (int) $_wp_additional_image_sizes[ $name ]['width'],
+					'crop'  => ! empty( $_wp_additional_image_sizes[ $name ]['crop'] ),
+				];
+
+				continue;
+			}
+
+			$sizes[ $name ] = [
+				'width' => (int) get_option( $name . '_size_w' ),
+				'crop'  => (bool) get_option( $name . '_crop' ),
+			];
+		}
+
+		return $sizes;
+	}
+
+	/** The name of a size someone else already makes at this width. */
+	public static function clashing_size( $width ) {
+		foreach ( self::other_sizes() as $name => $size ) {
+			if ( ! $size['crop'] && (int) $size['width'] === (int) $width ) {
+				return $name;
+			}
+		}
+
+		return '';
+	}
 	/** One row in the width list. */
 	private static function width_row( $width ) {
+		$clash = self::clashing_size( $width );
+		$note  = $clash === '' ? '' : sprintf(
+			'<span class="sbsk-width__clash">%s</span>',
+			/* translators: %s: the name of another image size */
+			esc_html( sprintf( __( 'same width as %s', 'sb-site-kit' ), $clash ) )
+		);
+
 		return sprintf(
-			'<div class="sbsk-width"><input type="number" name="sbsk_widths[]" value="%1$s" min="16" max="5000" step="1" class="small-text"><code class="sbsk-width__name">image-<span class="sbsk-width__value">%1$s</span></code><button type="button" class="button-link sbsk-width__remove" aria-label="%2$s">x</button></div>',
+			'<div class="sbsk-width"><input type="number" name="sbsk_widths[]" value="%1$s" min="16" max="5000" step="1" class="small-text"><code class="sbsk-width__name">image-<span class="sbsk-width__value">%1$s</span></code>%3$s<button type="button" class="button-link sbsk-width__remove" aria-label="%2$s">x</button></div>',
 			esc_attr( $width ),
-			esc_attr__( 'Remove', 'sb-site-kit' )
+			esc_attr__( 'Remove', 'sb-site-kit' ),
+			$note
 		);
 	}
 
@@ -276,13 +361,17 @@ class SBSK_Images {
 		echo '<div class="sbsk-report__panel" id="sbsk-report" hidden></div>';
 		echo '<div class="sbsk-progress" id="sbsk-progress" hidden>';
 		echo '<button type="button" class="sbsk-progress__close" id="sbsk-progress-close" aria-label="' . esc_attr__( 'Hide progress', 'sb-site-kit' ) . '">&times;</button>';
+		echo '<div class="sbsk-progress__row">';
+		echo '<div class="sbsk-progress__thumb" id="sbsk-progress-thumb"></div>';
+		echo '<div class="sbsk-progress__main">';
 		echo '<div class="sbsk-rebuild__bar" id="sbsk-rebuild-bar"><span></span></div>';
 		echo '<p class="sbsk-rebuild__status" role="status"></p>';
+		echo '</div></div>';
 		echo '</div>';
 
 		echo '<div class="sbsk-rebuild__actions">';
 		echo '<button type="button" class="button button-primary" id="sbsk-scan">' . esc_html__( 'Scan images', 'sb-site-kit' ) . '</button>';
-		echo '<button type="button" class="button" id="sbsk-rebuild-run" disabled>' . esc_html__( 'Build Thumbnails', 'sb-site-kit' ) . '</button>';
+		echo '<button type="button" class="button" id="sbsk-rebuild-run" hidden disabled>' . esc_html__( 'Build Thumbnails', 'sb-site-kit' ) . '</button>';
 		echo '<button type="button" class="button" id="sbsk-rebuild-clean" hidden>' . esc_html__( 'Remove old sizes', 'sb-site-kit' ) . '</button>';
 		echo '<button type="button" class="button sbsk-button--danger" id="sbsk-orphans-run" hidden>' . esc_html__( 'Delete orphan images', 'sb-site-kit' ) . '</button>';
 		echo '<label class="sbsk-rebuild__force" id="sbsk-force-wrap" hidden><input type="checkbox" id="sbsk-rebuild-force"> ' . esc_html__( 'Force rebuild all thumbnails', 'sb-site-kit' ) . '</label>';

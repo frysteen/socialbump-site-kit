@@ -85,6 +85,33 @@ class SBSK_Images_Orphans {
 	 * Files that live in uploads but are not uploads: index files WordPress drops
 	 * in to stop directory listings, server config, and anything hidden.
 	 */
+
+	const KEPT_OPTION = 'sbsk_kept_orphans';
+
+	/** Files marked as worth keeping, as paths relative to the uploads folder. */
+	public static function kept() {
+		return array_values( array_unique( (array) get_option( self::KEPT_OPTION, [] ) ) );
+	}
+
+	public static function keep( $relative, $keep = true ) {
+		$relative = ltrim( (string) $relative, '/' );
+		$list     = self::kept();
+
+		if ( $keep ) {
+			$list[] = $relative;
+		} else {
+			$list = array_diff( $list, [ $relative ] );
+		}
+
+		update_option( self::KEPT_OPTION, array_values( array_unique( $list ) ), false );
+	}
+
+	public static function is_kept( $path ) {
+		$base     = wp_normalize_path( trailingslashit( wp_upload_dir()['basedir'] ) );
+		$relative = ltrim( str_replace( $base, '', wp_normalize_path( $path ) ), '/' );
+
+		return in_array( $relative, self::kept(), true );
+	}
 	/**
 	 * The base names of every attachment, with the scaled suffix taken off.
 	 */
@@ -240,12 +267,62 @@ class SBSK_Images_Orphans {
 		return [ 'files' => $orphans, 'bytes' => $bytes ];
 	}
 
+
+	/**
+	 * Where a file is mentioned, if anywhere.
+	 *
+	 * A file with no attachment behind it can still be in use: a page built before
+	 * the attachment was deleted, a setting, a template. Anything found here is
+	 * kept out of the bulk delete and shown with the place it turned up.
+	 */
+	public static function references( $path ) {
+		global $wpdb;
+
+		$name  = basename( $path );
+		$like  = '%' . $wpdb->esc_like( $name ) . '%';
+		$found = [];
+
+		$posts = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT ID, post_title, post_type FROM {$wpdb->posts} WHERE post_content LIKE %s AND post_type <> 'revision' LIMIT 3",
+				$like
+			)
+		);
+
+		foreach ( $posts as $post ) {
+			$found[] = sprintf( '%s (%s)', $post->post_title !== '' ? $post->post_title : ( '#' . $post->ID ), $post->post_type );
+		}
+
+		$meta = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT p.ID, p.post_title, p.post_type FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE m.meta_value LIKE %s AND p.post_type <> 'revision' AND m.meta_key <> '_wp_attachment_metadata' LIMIT 3",
+				$like
+			)
+		);
+
+		foreach ( $meta as $post ) {
+			$label = sprintf( '%s (%s)', $post->post_title !== '' ? $post->post_title : ( '#' . $post->ID ), $post->post_type );
+
+			if ( ! in_array( $label, $found, true ) ) {
+				$found[] = $label;
+			}
+		}
+
+		$options = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_value LIKE %s AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' LIMIT 2", $like ) );
+
+		foreach ( $options as $option ) {
+			$found[] = sprintf( '%s (setting)', $option );
+		}
+
+		return $found;
+	}
 	/** Delete the files found, checking each one again as it goes. */
-	public static function remove( array $paths ) {
+	public static function remove( array $paths, $force = false ) {
 		$known   = self::known();
 		$uploads = wp_upload_dir();
 		$base    = trailingslashit( $uploads['basedir'] );
 		$removed = 0;
+		$skipped = 0;
 		$bytes   = 0;
 
 		foreach ( $paths as $path ) {
@@ -267,6 +344,13 @@ class SBSK_Images_Orphans {
 				continue;
 			}
 
+			// Files being kept on purpose, or still mentioned somewhere, are skipped.
+			if ( empty( $force ) && ( self::is_kept( $path ) || self::references( $path ) ) ) {
+				$skipped++;
+
+				continue;
+			}
+
 			if ( isset( $known[ $path ] ) || ! is_file( $path ) ) {
 				continue;
 			}
@@ -278,6 +362,6 @@ class SBSK_Images_Orphans {
 			$removed++;
 		}
 
-		return [ 'removed' => $removed, 'bytes' => $bytes ];
+		return [ 'removed' => $removed, 'skipped' => $skipped, 'bytes' => $bytes ];
 	}
 }
