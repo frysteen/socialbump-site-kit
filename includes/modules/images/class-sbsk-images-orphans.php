@@ -86,6 +86,54 @@ class SBSK_Images_Orphans {
 	 * in to stop directory listings, server config, and anything hidden.
 	 */
 	/**
+	 * The base names of every attachment, with the scaled suffix taken off.
+	 */
+	public static function bases() {
+		static $bases = null;
+
+		if ( $bases !== null ) {
+			return $bases;
+		}
+
+		global $wpdb;
+
+		$bases = [];
+
+		$rows = $wpdb->get_col( "SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file'" );
+
+		foreach ( $rows as $relative ) {
+			$name = pathinfo( $relative, PATHINFO_FILENAME );
+			$name = preg_replace( '/-scaled$/', '', $name );
+
+			if ( $name !== '' ) {
+				$bases[ strtolower( $name ) ] = true;
+			}
+		}
+
+		return $bases;
+	}
+
+	/**
+	 * Whether a file looks like it belongs to an image that is still in the library.
+	 *
+	 * Metadata is not always complete. A large upload keeps its untouched original
+	 * alongside the scaled copy, and an optimiser or an earlier tool can leave that
+	 * note out. Matching on the name as well means such a file is never mistaken
+	 * for something abandoned.
+	 */
+	public static function belongs_to_attachment( $path ) {
+		$name = pathinfo( $path, PATHINFO_FILENAME );
+
+		// Strip the extra extension an optimiser adds, then any size on the end.
+		$name = preg_replace( '/\.[a-z0-9]+$/i', '', $name );
+		$name = preg_replace( '/-\d+x\d+$/', '', $name );
+		$name = preg_replace( '/-scaled$/', '', $name );
+
+		$bases = self::bases();
+
+		return isset( $bases[ strtolower( $name ) ] );
+	}
+	/**
 	 * Read the file itself to see whether it really is an image.
 	 *
 	 * The listing goes by file extension, which is quick and needs no reading, but
@@ -179,7 +227,7 @@ class SBSK_Images_Orphans {
 
 		foreach ( self::folders() as $folder ) {
 			foreach ( (array) glob( $folder . '/*' ) as $path ) {
-				if ( ! is_file( $path ) || isset( $known[ $path ] ) || self::is_protected( $path ) || ! self::is_image_file( $path ) ) {
+				if ( ! is_file( $path ) || isset( $known[ $path ] ) || self::is_protected( $path ) || ! self::is_image_file( $path ) || self::belongs_to_attachment( $path ) ) {
 					continue;
 				}
 
@@ -215,7 +263,7 @@ class SBSK_Images_Orphans {
 				continue;
 			}
 
-			if ( self::is_protected( $path ) || ! self::is_image_file( $path ) || ! self::looks_like_image( $path ) ) {
+			if ( self::is_protected( $path ) || ! self::is_image_file( $path ) || ! self::looks_like_image( $path ) || self::belongs_to_attachment( $path ) ) {
 				continue;
 			}
 
