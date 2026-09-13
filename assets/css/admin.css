@@ -1105,10 +1105,8 @@ table.sbsk-report tr.sbsk-report__morerow td {
 }
 
 .sbsk-othersizes__list {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-	gap: 4px 16px;
 	margin: 10px 0 0;
+	max-width: 520px;
 	font-size: 12px;
 }
 
@@ -1201,4 +1199,59 @@ table.sbsk-report tr.sbsk-report__morerow td {
 .sbsk-tick {
 	color: #00681f;
 	font-weight: 600;
+}
+
+/* Editable and fixed sizes, one per line */
+.sbsk-othersizes__list li {
+	gap: 14px;
+	padding: 6px 0;
+}
+
+.sbsk-othersizes__list code {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.sbsk-othersizes__edit {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 0 0 auto;
+}
+
+.sbsk-othersizes__edit input[type="number"] {
+	width: 84px;
+}
+
+.sbsk-othersizes__edit span {
+	color: #646970;
+	white-space: nowrap;
+}
+
+.sbsk-othersizes__list em {
+	flex: 0 0 auto;
+	color: #8c8f94;
+	font-size: 11px;
+	font-style: normal;
+}
+
+.sbsk-othersizes__fixed {
+	flex: 0 0 auto;
+	color: #646970;
+	white-space: nowrap;
+}
+
+.sbsk-othersizes__save {
+	margin: 14px 0 0;
+}
+
+.sbsk-othersizes__save {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.sbsk-othersizes__save a {
+	font-size: 12px;
 }

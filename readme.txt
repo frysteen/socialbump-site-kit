@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.5.0
+Stable tag: 0.4.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,11 +19,8 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
-= 0.5.0 =
-* A rebuild now covers every registered size, not only the ones this plugin adds, so a missing WordPress or WooCommerce thumbnail is found too.
-* The Images page lists the additional thumbnail sizes, smallest first, with links to Settings for the three WordPress lets you change.
-* Force rebuild now asks which sizes to remake, with select all and select none, and switches itself off once it has run.
-* Progress lists each image as it is done, with a tick against every size it gained.
+= 0.4.2 =
+* Maintenance release.
 
 = 0.4.1 =
 * Fix: a stray bracket in the admin script stopped every button on the Images page from working.

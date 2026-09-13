@@ -182,6 +182,30 @@ class SBSK_Images {
 		}
 		sort( $clean );
 
+		// The sizes that are really WordPress or WooCommerce settings.
+		foreach ( self::editable_sizes() as $name => $size ) {
+			$field = 'sbsk_size_' . $name;
+
+			if ( ! isset( $_POST[ $field ] ) ) {
+				continue;
+			}
+
+			$width = (int) wp_unslash( $_POST[ $field ] );
+
+			if ( $width < 0 || $width > 5000 ) {
+				continue;
+			}
+
+			update_option( $size['option'], $width );
+
+			// The core sizes keep a height as well, matched to the width.
+			$heights = [ 'thumbnail' => 'thumbnail_size_h', 'medium' => 'medium_size_h', 'large' => 'large_size_h' ];
+
+			if ( isset( $heights[ $name ] ) ) {
+				update_option( $heights[ $name ], $width );
+			}
+		}
+
 		$settings           = (array) get_option( SBSK_Modules::SETTINGS_OPTION, [] );
 		$settings['images'] = [
 			'sizes_on'     => empty( $_POST['sbsk_sizes_on'] ) ? 0 : 1,
@@ -310,6 +334,30 @@ class SBSK_Images {
 	}
 
 
+
+	/**
+	 * Sizes that are settings rather than code, so they can be changed here.
+	 *
+	 * WordPress keeps three of them under Settings and hides medium_large
+	 * altogether. WooCommerce keeps its own three in its customiser. All of them
+	 * are just options underneath.
+	 */
+	public static function editable_sizes() {
+		$sizes = [
+			'thumbnail'    => [ 'option' => 'thumbnail_size_w' ],
+			'medium'       => [ 'option' => 'medium_size_w' ],
+			'medium_large' => [ 'option' => 'medium_large_size_w' ],
+			'large'        => [ 'option' => 'large_size_w' ],
+		];
+
+		if ( class_exists( 'WooCommerce' ) ) {
+			$sizes['woocommerce_thumbnail']         = [ 'option' => 'woocommerce_thumbnail_image_width' ];
+			$sizes['woocommerce_single']            = [ 'option' => 'woocommerce_single_image_width' ];
+			$sizes['woocommerce_gallery_thumbnail'] = [ 'option' => 'woocommerce_gallery_thumbnail_image_width' ];
+		}
+
+		return (array) apply_filters( 'sbsk/images/editable_sizes', $sizes );
+	}
 	/** The list of sizes a forced rebuild will remake. */
 	private static function render_size_picker() {
 		require_once __DIR__ . '/class-sbsk-images-rebuild.php';
@@ -356,37 +404,59 @@ class SBSK_Images {
 			return;
 		}
 
-		// Smallest first, so the list reads in the same order as ours.
-		uasort(
+		$editable = self::editable_sizes();
+
+		// The ones that can be changed first, each group smallest first.
+		uksort(
 			$sizes,
-			function ( $a, $b ) {
-				return (int) $a['width'] <=> (int) $b['width'];
+			function ( $a, $b ) use ( $sizes, $editable ) {
+				$one = isset( $editable[ $a ] ) ? 0 : 1;
+				$two = isset( $editable[ $b ] ) ? 0 : 1;
+
+				if ( $one !== $two ) {
+					return $one <=> $two;
+				}
+
+				return (int) $sizes[ $a ]['width'] <=> (int) $sizes[ $b ]['width'];
 			}
 		);
 
-		// The three WordPress keeps under Settings can be changed there.
-		$settings = [ 'thumbnail', 'medium', 'large' ];
-		$link     = admin_url( 'options-media.php' );
-
 		echo '<div class="sbsk-othersizes">';
 		echo '<h3>' . esc_html__( 'Additional thumbnail sizes', 'sb-site-kit' ) . '</h3>';
-		echo '<p class="sbsk-report__note">' . esc_html__( 'Registered by WordPress, the theme or another plugin. These are not ours to remove, but a rebuild covers them too.', 'sb-site-kit' ) . '</p>';
+		echo '<p class="sbsk-report__note">' . esc_html__( 'Made on every upload by WordPress, the theme or another plugin. The ones with a box can be changed here. A rebuild covers them all.', 'sb-site-kit' ) . '</p>';
 		echo '<ul class="sbsk-othersizes__list">';
 
 		foreach ( $sizes as $name => $size ) {
-			$shape = $size['crop'] ? __( 'cropped', 'sb-site-kit' ) : __( 'uncropped', 'sb-site-kit' );
-			$label = $size['width'] ? sprintf( '%s px, %s', number_format_i18n( $size['width'] ), $shape ) : $shape;
+			echo '<li>';
+			echo '<code>' . esc_html( $name ) . '</code>';
 
-			if ( in_array( $name, $settings, true ) ) {
-				$title = '<a href="' . esc_url( $link ) . '">' . esc_html( $name ) . '</a>';
+			if ( isset( $editable[ $name ] ) ) {
+				$field = 'sbsk_size_' . $name;
+
+				printf(
+					'<span class="sbsk-othersizes__edit"><input type="number" name="%1$s" value="%2$s" min="0" max="5000" step="1" class="small-text"> <span>px</span></span>',
+					esc_attr( $field ),
+					esc_attr( (int) $size['width'] )
+				);
+
+				if ( $editable[ $name ]['note'] !== '' ) {
+					echo '<em>' . esc_html( $editable[ $name ]['note'] ) . '</em>';
+				}
 			} else {
-				$title = esc_html( $name );
+				$label = $size['width'] ? number_format_i18n( $size['width'] ) . ' px' : '';
+
+				echo '<span class="sbsk-othersizes__fixed">' . esc_html( $label ) . '</span>';
 			}
 
-			echo '<li><code>' . $title . '</code><span>' . esc_html( $label ) . '</span></li>';
+			echo '</li>';
 		}
 
-		echo '</ul></div>';
+		echo '</ul>';
+		echo '<p class="sbsk-othersizes__save">';
+		echo '<button type="submit" class="button">' . esc_html__( 'Save sizes', 'sb-site-kit' ) . '</button>';
+		echo '<a href="' . esc_url( admin_url( 'options-media.php' ) ) . '">' . esc_html__( 'Settings', 'sb-site-kit' ) . '</a>';
+		echo '</p>';
+		echo '</div>';
 	}
 	/** One row in the width list. */
 	private static function width_row( $width ) {
