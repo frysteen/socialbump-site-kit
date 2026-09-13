@@ -197,8 +197,8 @@ class SBSK_Settings {
 		<div class="sbsk-header">
 			<div class="sbsk-header__brand">
 				<a class="sbsk-header__home" href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::PAGE_SLUG ) ); ?>">
-					<img class="sbsk-header__logo" src="<?php echo esc_url( SBSK_URL . 'assets/img/socialbump-logo-light.svg' ); ?>
-				</a>" alt="SocialBUMP" width="203" height="28">
+					<img class="sbsk-header__logo" src="<?php echo esc_url( SBSK_URL . 'assets/img/socialbump-logo-light.svg' ); ?>" alt="SocialBUMP" width="203" height="28">
+				</a>
 				<h1 class="sbsk-header__title"><?php echo esc_html( $title ); ?></h1>
 				<?php
 				$state   = get_site_transient( 'update_plugins' );
