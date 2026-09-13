@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.4.3
+Stable tag: 0.4.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,10 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 0.4.4 =
+* New WooCommerce group with five switchable fixes: default category title, from price on variable products, hiding empty decimals, both prices in the cart, and turning off product image zoom.
+* A module group whose features all need a missing plugin is now greyed out and cannot be switched on.
+
 = 0.4.3 =
 * Publishing now retries GitHub when it fails, checks the zip attached, and no longer undoes a release that actually went out.
 * Publish page fills in the notes box from changes logged since the last release.

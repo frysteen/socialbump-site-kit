@@ -297,12 +297,19 @@ class SBSK_Settings {
 			$on    = ! empty( $states[ $group ] );
 			$states_of = SBSK_Modules::instance()->get_states();
 
-			$card  = '<div class="sbsk-card' . ( $on ? ' is-on' : '' ) . '">';
+			$needs = SBSK_Modules::instance()->group_needs( $group );
+
+			$card  = '<div class="sbsk-card' . ( $on && ! $needs ? ' is-on' : '' ) . ( $needs ? ' is-unavailable' : '' ) . '">';
 			$card .= '<div class="sbsk-card__head"><h3>' . esc_html( $section['title'] ) . '</h3>';
-			$card .= '<label class="sbsk-switch"><input type="checkbox" name="sbsk_groups[' . esc_attr( $group ) . ']" value="1" ' . checked( $on, true, false ) . '>';
+			$card .= '<label class="sbsk-switch"><input type="checkbox" name="sbsk_groups[' . esc_attr( $group ) . ']" value="1" ' . checked( $on, true, false ) . ' ' . disabled( (bool) $needs, true, false ) . '>';
 			$card .= '<span class="sbsk-switch__track"><span class="sbsk-switch__dot"></span></span>';
 			$card .= '<span class="screen-reader-text">' . esc_html( $section['title'] ) . '</span></label></div>';
 			$card .= '<p class="sbsk-card__desc">' . esc_html( $section['description'] ) . '</p>';
+
+			if ( $needs ) {
+				/* translators: %s: plugin name(s) */
+				$card .= '<p class="sbsk-card__needs">' . sprintf( esc_html__( 'Needs %s installed and active.', 'sb-site-kit' ), esc_html( implode( ' and ', $needs ) ) ) . '</p>';
+			}
 			$card .= '<ul class="sbsk-features">';
 
 			foreach ( $modules as $module_id => $module ) {
@@ -605,7 +612,15 @@ class SBSK_Settings {
 		$posted = isset( $_POST['sbsk_groups'] ) ? (array) wp_unslash( $_POST['sbsk_groups'] ) : [];
 		$states = [];
 
+		$saved = (array) get_option( SBSK_Modules::GROUPS_OPTION, [] );
+
 		foreach ( array_keys( $this->sections() ) as $group ) {
+			// A greyed out group has no switch to submit, so keep whatever it was set to.
+			if ( SBSK_Modules::instance()->group_needs( $group ) ) {
+				$states[ $group ] = array_key_exists( $group, $saved ) ? (int) (bool) $saved[ $group ] : 1;
+				continue;
+			}
+
 			$states[ $group ] = empty( $posted[ $group ] ) ? 0 : 1;
 		}
 
@@ -747,6 +762,10 @@ class SBSK_Settings {
 			'images'     => [
 				'title'       => __( 'Images', 'sb-site-kit' ),
 				'description' => __( 'Image sizes, tidy titles and alt text, and rebuilding.', 'sb-site-kit' ),
+			],
+			'woocommerce' => [
+				'title'       => __( 'WooCommerce', 'sb-site-kit' ),
+				'description' => __( 'Corrections and tweaks for the WooCommerce admin.', 'sb-site-kit' ),
 			],
 			'admin'      => [
 				'title'       => __( 'Admin Settings', 'sb-site-kit' ),

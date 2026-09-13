@@ -136,12 +136,41 @@ class SBSK_Modules {
 	 * Groups are the top level switches on the Modules page. A group that is off
 	 * hides its page and stops everything inside it from loading.
 	 */
+	/**
+	 * What a whole group needs, when not one thing in it can run on this site.
+	 *
+	 * A single usable module is enough for the group to be worth having, so this
+	 * only returns something when every module in it is held back. A group in that
+	 * state counts as off, whatever its saved switch says, so its page stays away
+	 * and nothing inside it loads.
+	 */
+	public function group_needs( $group ) {
+		$modules = $this->in_group( $group );
+
+		if ( ! $modules ) {
+			return [];
+		}
+
+		$needs = [];
+
+		foreach ( $modules as $id => $module ) {
+			$missing = $this->missing( $id );
+
+			if ( ! $missing && ! $this->unavailable( $id ) ) {
+				return [];
+			}
+
+			$needs = array_merge( $needs, $missing );
+		}
+
+		return array_values( array_unique( $needs ) );
+	}
 	public function group_states() {
 		$saved  = (array) get_option( self::GROUPS_OPTION, [] );
 		$states = [];
 
 		foreach ( array_keys( SBSK_Settings::instance()->sections() ) as $group ) {
-			$states[ $group ] = array_key_exists( $group, $saved ) ? (bool) $saved[ $group ] : true;
+			$states[ $group ] = $this->group_needs( $group ) ? false : ( array_key_exists( $group, $saved ) ? (bool) $saved[ $group ] : true );
 		}
 
 		return $states;
