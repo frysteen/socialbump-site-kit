@@ -21,7 +21,6 @@ return [
 			'type'        => 'checkbox',
 			'label'       => __( 'Use on the single product page', 'sb-site-kit' ),
 			'default'     => 0,
-			'description' => __( 'Off by default, since the full range is usually wanted on the product page.', 'sb-site-kit' ),
 		],
 		'label'     => [
 			'type'        => 'text',

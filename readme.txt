@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.4.4
+Stable tag: 0.4.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 0.4.5 =
+* New WooCommerce module: require login to check out, which sends a logged out customer to My Account and back again. Greys itself out while guest checkout is switched on, with a link to that setting.
+
 = 0.4.4 =
 * New WooCommerce group with five switchable fixes: default category title, from price on variable products, hiding empty decimals, both prices in the cart, and turning off product image zoom.
 * A module group whose features all need a missing plugin is now greyed out and cannot be switched on.

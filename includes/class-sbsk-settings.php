@@ -404,7 +404,8 @@ class SBSK_Settings {
 		);
 
 		if ( $blocked ) {
-			echo '<p class="sbsk-card__needs">' . esc_html( $blocked ) . '</p>';
+			// A module can point at the setting that is holding it back, so links are allowed here.
+			echo '<p class="sbsk-card__needs">' . wp_kses( $blocked, [ 'a' => [ 'href' => [], 'target' => [], 'rel' => [] ] ] ) . '</p>';
 		}
 
 		if ( $missing ) {
