@@ -156,7 +156,7 @@ class SBSK_Images_Rebuild {
 			return $result;
 		}
 
-		$result['built'] = self::build( $id );
+		$result['built'] = self::build( $id, true );
 
 		return $result;
 	}
@@ -167,7 +167,7 @@ class SBSK_Images_Rebuild {
 	 * rebuild everything, so existing thumbnails keep their names and are not
 	 * written over.
 	 */
-	public static function build( $id ) {
+	public static function build( $id, $all = false ) {
 		$built = [];
 
 		if ( ! wp_attachment_is_image( $id ) ) {
@@ -181,7 +181,8 @@ class SBSK_Images_Rebuild {
 		}
 
 		$meta    = (array) wp_get_attachment_metadata( $id );
-		$wanted  = self::missing( $id, $meta );
+		$wanted  = $all ? self::missing_all( $id, $meta ) : self::missing( $id, $meta );
+		$sizes   = self::all_wanted();
 
 		if ( ! $wanted ) {
 			return $built;
@@ -192,9 +193,12 @@ class SBSK_Images_Rebuild {
 		$extension = pathinfo( $file, PATHINFO_EXTENSION );
 
 		foreach ( $wanted as $name ) {
-			$width = (int) str_replace( 'image-', '', $name );
+			$spec   = isset( $sizes[ $name ] ) ? $sizes[ $name ] : null;
+			$width  = $spec ? (int) $spec['width'] : (int) str_replace( 'image-', '', $name );
+			$height = $spec ? (int) $spec['height'] : 9999;
+			$crop   = $spec ? (bool) $spec['crop'] : false;
 
-			if ( $width < 1 ) {
+			if ( $width < 1 && $height < 1 ) {
 				continue;
 			}
 
@@ -204,7 +208,7 @@ class SBSK_Images_Rebuild {
 				continue;
 			}
 
-			$editor->resize( $width, 9999, false );
+			$editor->resize( $width ? $width : null, $height ? $height : null, $crop );
 
 			$size   = $editor->get_size();
 			$target = $folder . $base . '-' . (int) $size['width'] . 'x' . (int) $size['height'] . '.' . $extension;
@@ -331,5 +335,143 @@ class SBSK_Images_Rebuild {
 		$source   = $original ? $original : get_attached_file( $id );
 
 		return pathinfo( (string) $source, PATHINFO_FILENAME );
+	}
+	/**
+	 * Every size an image should have, as name => width, height and crop.
+	 *
+	 * Ours plus everything WordPress, the theme and other plugins register, since
+	 * a missing thumbnail is a missing thumbnail whoever asked for it.
+	 */
+	public static function all_wanted() {
+		global $_wp_additional_image_sizes;
+
+		$wanted = [];
+
+		foreach ( get_intermediate_image_sizes() as $name ) {
+			if ( isset( $_wp_additional_image_sizes[ $name ] ) ) {
+				$wanted[ $name ] = [
+					'width'  => (int) $_wp_additional_image_sizes[ $name ]['width'],
+					'height' => (int) $_wp_additional_image_sizes[ $name ]['height'],
+					'crop'   => (bool) $_wp_additional_image_sizes[ $name ]['crop'],
+				];
+
+				continue;
+			}
+
+			$wanted[ $name ] = [
+				'width'  => (int) get_option( $name . '_size_w' ),
+				'height' => (int) get_option( $name . '_size_h' ),
+				'crop'   => (bool) get_option( $name . '_crop' ),
+			];
+		}
+
+		return array_filter(
+			$wanted,
+			function ( $size ) {
+				return $size['width'] > 0 || $size['height'] > 0;
+			}
+		);
+	}
+
+	/**
+	 * Sizes an attachment is missing, counting everything registered.
+	 *
+	 * A size is only expected when the original is big enough for it, since
+	 * WordPress will not stretch an image to fill a larger size.
+	 */
+	public static function missing_all( $id, array $meta = null ) {
+		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
+
+		if ( empty( $meta['width'] ) ) {
+			return [];
+		}
+
+		$have    = array_keys( (array) ( $meta['sizes'] ?? [] ) );
+		$missing = [];
+
+		foreach ( self::all_wanted() as $name => $size ) {
+			if ( in_array( $name, $have, true ) ) {
+				continue;
+			}
+
+			$fits = $size['crop']
+				? ( (int) $meta['width'] >= $size['width'] && (int) $meta['height'] >= $size['height'] )
+				: ( ( $size['width'] && (int) $meta['width'] > $size['width'] ) || ( $size['height'] && (int) $meta['height'] > $size['height'] ) );
+
+			if ( $fits ) {
+				$missing[] = $name;
+			}
+		}
+
+		return $missing;
+	}
+	/**
+	 * Make the named sizes again, whether or not they already exist.
+	 *
+	 * Used by the force rebuild, where the point is to replace what is there. Any
+	 * size too large for the original is skipped rather than upscaled.
+	 */
+	public static function rebuild( $id, array $names ) {
+		$done = [];
+
+		if ( ! $names || ! wp_attachment_is_image( $id ) ) {
+			return $done;
+		}
+
+		$file = get_attached_file( $id );
+
+		if ( ! $file || ! file_exists( $file ) ) {
+			return $done;
+		}
+
+		$meta      = (array) wp_get_attachment_metadata( $id );
+		$sizes     = self::all_wanted();
+		$folder    = trailingslashit( dirname( $file ) );
+		$base      = self::base_name( $id, $meta );
+		$extension = pathinfo( $file, PATHINFO_EXTENSION );
+
+		foreach ( $names as $name ) {
+			if ( empty( $sizes[ $name ] ) ) {
+				continue;
+			}
+
+			$spec = $sizes[ $name ];
+
+			// Nothing to gain from stretching a small original.
+			if ( ! empty( $meta['width'] ) && $spec['width'] && (int) $meta['width'] < $spec['width'] ) {
+				continue;
+			}
+
+			$editor = wp_get_image_editor( $file );
+
+			if ( is_wp_error( $editor ) ) {
+				continue;
+			}
+
+			$editor->resize( $spec['width'] ? $spec['width'] : null, $spec['height'] ? $spec['height'] : null, $spec['crop'] );
+
+			$size = $editor->get_size();
+			$target = $folder . $base . '-' . (int) $size['width'] . 'x' . (int) $size['height'] . '.' . $extension;
+			$saved  = $editor->save( $target );
+
+			if ( is_wp_error( $saved ) || empty( $saved['file'] ) ) {
+				continue;
+			}
+
+			$meta['sizes'][ $name ] = [
+				'file'      => $saved['file'],
+				'width'     => (int) $saved['width'],
+				'height'    => (int) $saved['height'],
+				'mime-type' => $saved['mime-type'],
+			];
+
+			$done[] = $name;
+		}
+
+		if ( $done ) {
+			wp_update_attachment_metadata( $id, $meta );
+		}
+
+		return $done;
 	}
 }

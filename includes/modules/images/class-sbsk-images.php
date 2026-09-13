@@ -244,6 +244,9 @@ class SBSK_Images {
 		echo '<button type="submit" class="button sbsk-button--danger" name="sbsk_reset_sizes" value="1" id="sbsk-reset-widths">' . esc_html__( 'Reset to default sizes', 'sb-site-kit' ) . '</button>';
 		echo '</div>';
 		echo '</div>';
+
+		self::render_other_sizes();
+
 		echo '</section>';
 
 		// On upload
@@ -304,6 +307,86 @@ class SBSK_Images {
 		}
 
 		return '';
+	}
+
+
+	/** The list of sizes a forced rebuild will remake. */
+	private static function render_size_picker() {
+		require_once __DIR__ . '/class-sbsk-images-rebuild.php';
+
+		$sizes = SBSK_Images_Rebuild::all_wanted();
+
+		if ( ! $sizes ) {
+			return;
+		}
+
+		uasort(
+			$sizes,
+			function ( $a, $b ) {
+				return (int) $a['width'] <=> (int) $b['width'];
+			}
+		);
+
+		echo '<div class="sbsk-sizepicker" id="sbsk-sizepicker" hidden>';
+		echo '<div class="sbsk-sizepicker__head"><strong>' . esc_html__( 'Sizes to rebuild', 'sb-site-kit' ) . '</strong><span>';
+		echo '<button type="button" class="button-link" id="sbsk-sizes-all">' . esc_html__( 'Select all', 'sb-site-kit' ) . '</button>';
+		echo ' <button type="button" class="button-link" id="sbsk-sizes-none">' . esc_html__( 'Select none', 'sb-site-kit' ) . '</button>';
+		echo '</span></div><div class="sbsk-sizepicker__list">';
+
+		foreach ( $sizes as $name => $size ) {
+			$label = $size['width'] ? $name . ' (' . number_format_i18n( $size['width'] ) . ' px)' : $name;
+
+			$html = '<label><input type="checkbox" class="sbsk-size-choice" value="' . esc_attr( $name ) . '" checked> ' . esc_html( $label ) . '</label>';
+
+			echo $html;
+		}
+
+		echo '</div></div>';
+	}
+	/**
+	 * The sizes WordPress, the theme and other plugins make.
+	 *
+	 * Shown whether or not our own sizes are switched on, because these are made
+	 * on every upload regardless and count towards what a rebuild has to do.
+	 */
+	private static function render_other_sizes() {
+		$sizes = self::other_sizes();
+
+		if ( ! $sizes ) {
+			return;
+		}
+
+		// Smallest first, so the list reads in the same order as ours.
+		uasort(
+			$sizes,
+			function ( $a, $b ) {
+				return (int) $a['width'] <=> (int) $b['width'];
+			}
+		);
+
+		// The three WordPress keeps under Settings can be changed there.
+		$settings = [ 'thumbnail', 'medium', 'large' ];
+		$link     = admin_url( 'options-media.php' );
+
+		echo '<div class="sbsk-othersizes">';
+		echo '<h3>' . esc_html__( 'Additional thumbnail sizes', 'sb-site-kit' ) . '</h3>';
+		echo '<p class="sbsk-report__note">' . esc_html__( 'Registered by WordPress, the theme or another plugin. These are not ours to remove, but a rebuild covers them too.', 'sb-site-kit' ) . '</p>';
+		echo '<ul class="sbsk-othersizes__list">';
+
+		foreach ( $sizes as $name => $size ) {
+			$shape = $size['crop'] ? __( 'cropped', 'sb-site-kit' ) : __( 'uncropped', 'sb-site-kit' );
+			$label = $size['width'] ? sprintf( '%s px, %s', number_format_i18n( $size['width'] ), $shape ) : $shape;
+
+			if ( in_array( $name, $settings, true ) ) {
+				$title = '<a href="' . esc_url( $link ) . '">' . esc_html( $name ) . '</a>';
+			} else {
+				$title = esc_html( $name );
+			}
+
+			echo '<li><code>' . $title . '</code><span>' . esc_html( $label ) . '</span></li>';
+		}
+
+		echo '</ul></div>';
 	}
 	/** One row in the width list. */
 	private static function width_row( $width ) {
@@ -366,6 +449,7 @@ class SBSK_Images {
 		echo '<div class="sbsk-progress__main">';
 		echo '<div class="sbsk-rebuild__bar" id="sbsk-rebuild-bar"><span></span></div>';
 		echo '<p class="sbsk-rebuild__status" role="status"></p>';
+		echo '<ul class="sbsk-progress__log" id="sbsk-progress-log"></ul>';
 		echo '</div></div>';
 		echo '</div>';
 
@@ -376,6 +460,7 @@ class SBSK_Images {
 		echo '<button type="button" class="button sbsk-button--danger" id="sbsk-orphans-run" hidden>' . esc_html__( 'Delete orphan images', 'sb-site-kit' ) . '</button>';
 		echo '<label class="sbsk-rebuild__force" id="sbsk-force-wrap" hidden><input type="checkbox" id="sbsk-rebuild-force"> ' . esc_html__( 'Force rebuild all thumbnails', 'sb-site-kit' ) . '</label>';
 		echo '</div>';
+		self::render_size_picker();
 		echo '</div></section>';
 	}
 }

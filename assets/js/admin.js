@@ -147,7 +147,7 @@
 				$rebuild.find( 'button' ).prop( 'disabled', ! on );
 
 				if ( on ) {
-					$build.prop( 'disabled', lastMissing < 1 && ! $( '#sbsk-rebuild-force' ).prop( 'checked' ) );
+					refreshBuild();
 				}
 			}
 
@@ -170,7 +170,8 @@
 
 					$panel.prop( 'hidden', false ).html( data.html );
 					lastMissing = data.missing;
-					$build.prop( 'hidden', false ).prop( 'disabled', data.missing < 1 && ! $( '#sbsk-rebuild-force' ).prop( 'checked' ) );
+					$build.prop( 'hidden', false );
+					refreshBuild();
 					$clean.prop( 'hidden', data.stale < 1 );
 					lastOrphans = ( typeof data.deletable === 'number' ) ? data.deletable : data.orphans;
 					$orphan.prop( 'hidden', lastOrphans < 1 );
@@ -179,8 +180,8 @@
 				} );
 			}
 
-			function batch( offset, total, force, mode ) {
-				$.post( ajaxurl, { action: 'sbsk_images_batch', nonce: nonce, offset: offset, force: force ? 1 : 0, mode: mode } ).done( function ( response ) {
+			function batch( offset, total, force, mode, sizes ) {
+				$.post( ajaxurl, { action: 'sbsk_images_batch', nonce: nonce, offset: offset, force: force ? 1 : 0, mode: mode, sizes: sizes || [], batch: force ? 1 : 5 } ).done( function ( response ) {
 					if ( ! response || ! response.success ) {
 						$status.text( 'Something went wrong. Try again.' );
 						buttons( true );
@@ -197,6 +198,20 @@
 					$bar.css( 'width', ( total ? Math.round( ( done / total ) * 100 ) : 100 ) + '%' );
 					$status.text( done + ' of ' + total + ' checked.' );
 
+					if ( data.items && data.items.length ) {
+						var $log = $( '#sbsk-progress-log' );
+
+						data.items.forEach( function ( item ) {
+							var sizes = ( item.sizes || [] ).map( function ( name ) {
+								return '<li><span class="sbsk-tick">&#10003;</span>' + name + '</li>';
+							} ).join( '' );
+
+							$log.prepend( '<li><strong>' + item.name + '</strong><ul>' + sizes + '</ul></li>' );
+						} );
+
+						$log.find( 'li:gt( 20 )' ).remove();
+					}
+
 					if ( data.last && data.last.thumb ) {
 						$( '#sbsk-progress-thumb' ).html( '<img src="' + data.last.thumb + '" alt="">' );
 						$status.text( done + ' of ' + total + ' checked. ' + data.last.name );
@@ -204,18 +219,25 @@
 
 					if ( data.done || done >= total ) {
 						$status.text( 'Finished. ' + totals.built + ' sizes built, ' + totals.files + ' files removed.' );
+
+						// A forced run is a deliberate act, so it does not stay armed.
+						if ( force ) {
+							$( '#sbsk-rebuild-force' ).prop( 'checked', false );
+							$( '#sbsk-sizepicker' ).prop( 'hidden', true );
+						}
+
 						scan( true );
 						return;
 					}
 
-					batch( data.offset, total, force, mode );
+					batch( data.offset, total, force, mode, sizes );
 				} ).fail( function () {
 					$status.text( 'The server did not answer. Nothing else was changed.' );
 					buttons( true );
 				} );
 			}
 
-			function start( mode, force ) {
+			function start( mode, force, sizes ) {
 				totals = { built: 0, removed: 0, files: 0 };
 
 				buttons( false );
@@ -223,6 +245,7 @@
 				$bar.css( 'width', '0%' );
 				$status.text( 'Working...' );
 				$( '#sbsk-progress-thumb' ).empty();
+				$( '#sbsk-progress-log' ).empty();
 
 				$.post( ajaxurl, { action: 'sbsk_images_count', nonce: nonce } ).done( function ( response ) {
 					var total = ( response && response.success ) ? response.data.total : 0;
@@ -233,13 +256,47 @@
 						return;
 					}
 
-					batch( 0, total, force, mode );
+					batch( 0, total, force, mode, sizes );
 				} );
 			}
 
+			function refreshBuild() {
+				var force = $( '#sbsk-rebuild-force' ).prop( 'checked' );
+
+				if ( force ) {
+					$build.prop( 'disabled', chosenSizes().length < 1 );
+					return;
+				}
+
+				$build.prop( 'disabled', lastMissing < 1 );
+			}
+
 			$( '#sbsk-rebuild-force' ).on( 'change', function () {
-				$build.prop( 'disabled', ! this.checked && lastMissing < 1 );
+				$( '#sbsk-sizepicker' ).prop( 'hidden', ! this.checked );
+				refreshBuild();
 			} );
+
+			$panel.add( $rebuild ).on( 'change', '.sbsk-size-choice', refreshBuild );
+
+			$( '#sbsk-sizes-all' ).on( 'click', function () {
+				$( '.sbsk-size-choice' ).prop( 'checked', true );
+				refreshBuild();
+			} );
+
+			$( '#sbsk-sizes-none' ).on( 'click', function () {
+				$( '.sbsk-size-choice' ).prop( 'checked', false );
+				refreshBuild();
+			} );
+
+			function chosenSizes() {
+				var names = [];
+
+				$( '.sbsk-size-choice:checked' ).each( function () {
+					names.push( this.value );
+				} );
+
+				return names;
+			}
 
 			$panel.on( 'click', '#sbsk-show-all', function () {
 				$panel.find( 'tr.is-extra' ).removeClass( 'is-extra' );
@@ -289,11 +346,13 @@
 			$build.on( 'click', function () {
 				var force = $( '#sbsk-rebuild-force' ).prop( 'checked' );
 
-				if ( force && ! window.confirm( 'Build every size again? This replaces files that already exist.' ) ) {
+				if ( force && ! window.confirm( 'Rebuild ' + chosenSizes().length + ' size' + ( chosenSizes().length === 1 ? '' : 's' ) + ' on every image? This replaces files that already exist.' ) ) {
 					return;
 				}
 
-				start( 'build', force );
+				var sizes = force ? chosenSizes() : [];
+
+				start( 'build', force, sizes );
 			} );
 
 			$clean.on( 'click', function () {
@@ -345,6 +404,7 @@
 				buttons( false );
 				$progress.prop( 'hidden', false );
 				$( '#sbsk-progress-thumb' ).empty();
+				$( '#sbsk-progress-log' ).empty();
 				$bar.css( 'width', '0%' );
 				$status.text( 'Clearing...' );
 

@@ -76,7 +76,7 @@ class SBSK_Images_Tools {
 		foreach ( $ids as $id ) {
 			$meta = (array) wp_get_attachment_metadata( $id );
 
-			if ( SBSK_Images_Rebuild::missing( $id, $meta ) ) {
+			if ( SBSK_Images_Rebuild::missing_all( $id, $meta ) ) {
 				$missing++;
 			}
 
@@ -104,13 +104,25 @@ class SBSK_Images_Tools {
 
 		$offset  = isset( $_POST['offset'] ) ? max( 0, (int) $_POST['offset'] ) : 0;
 		$force   = ! empty( $_POST['force'] );
-		$ids     = array_slice( self::ids(), $offset, self::BATCH );
+		$size    = isset( $_POST['batch'] ) ? (int) $_POST['batch'] : self::BATCH;
+		$size    = max( 1, min( self::BATCH, $size ) );
+		$ids     = array_slice( self::ids(), $offset, $size );
 		$built   = 0;
 		$removed = 0;
 		$files   = 0;
 
 		$mode = isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : 'build';
-		$last = 0;
+
+		// Only sizes that are actually registered can be asked for.
+		$asked  = isset( $_POST['sizes'] ) ? (array) wp_unslash( $_POST['sizes'] ) : [];
+		$asked  = array_map( 'sanitize_text_field', $asked );
+		$chosen = array_values( array_intersect( $asked, array_keys( SBSK_Images_Rebuild::all_wanted() ) ) );
+
+		if ( $force && ! $chosen ) {
+			$chosen = array_keys( SBSK_Images_Rebuild::all_wanted() );
+		}
+		$last  = 0;
+		$items = [];
 
 		foreach ( $ids as $id ) {
 			$last = $id;
@@ -124,15 +136,28 @@ class SBSK_Images_Tools {
 			}
 
 			if ( $force ) {
-				$result   = SBSK_Images_Rebuild::process( $id, true );
-				$built   += count( $result['built'] );
-				$removed += count( $result['removed'] );
-				$files   += (int) $result['files'];
+				$made   = SBSK_Images_Rebuild::rebuild( $id, $chosen );
+			$built += count( $made );
+
+			$items[] = [
+				'name'  => basename( (string) get_attached_file( $id ) ),
+				'thumb' => self::preview( $id ),
+				'sizes' => $made,
+			];
 
 				continue;
 			}
 
-			$built += count( SBSK_Images_Rebuild::build( $id ) );
+			$made   = SBSK_Images_Rebuild::build( $id, true );
+			$built += count( $made );
+
+			if ( $made ) {
+				$items[] = [
+					'name'  => basename( (string) get_attached_file( $id ) ),
+					'thumb' => self::preview( $id ),
+					'sizes' => $made,
+				];
+			}
 		}
 
 		wp_send_json_success(
@@ -142,8 +167,9 @@ class SBSK_Images_Tools {
 				'built'     => $built,
 				'removed'   => $removed,
 				'files'     => $files,
-				'done'      => count( $ids ) < self::BATCH,
+				'done'      => count( $ids ) < $size,
 				'last'      => $last ? [ 'name' => basename( (string) get_attached_file( $last ) ), 'thumb' => self::preview( $last ) ] : null,
+				'items'     => $items,
 			]
 		);
 	}
@@ -205,7 +231,7 @@ class SBSK_Images_Tools {
 
 		foreach ( self::ids() as $id ) {
 			$meta     = (array) wp_get_attachment_metadata( $id );
-			$missing += count( SBSK_Images_Rebuild::missing( $id, $meta ) );
+			$missing += count( SBSK_Images_Rebuild::missing_all( $id, $meta ) );
 			$names        = SBSK_Images_Rebuild::stale( $id, $meta );
 			$stale       += count( $names );
 			$stale_files += SBSK_Images_Rebuild::stale_files( $id, $meta );
@@ -378,11 +404,10 @@ class SBSK_Images_Tools {
 	public static function sizes_list( $id ) {
 		$meta    = (array) wp_get_attachment_metadata( $id );
 		$have    = (array) ( $meta['sizes'] ?? [] );
-		$missing = SBSK_Images_Rebuild::missing( $id, $meta );
+		$missing = SBSK_Images_Rebuild::missing_all( $id, $meta );
 		$rows    = '';
 
-		foreach ( SBSK_Images::widths() as $width ) {
-			$name = 'image-' . (int) $width;
+		foreach ( array_keys( SBSK_Images_Rebuild::all_wanted() ) as $name ) {
 
 			if ( isset( $have[ $name ] ) ) {
 				$state = (int) $have[ $name ]['width'] . ' x ' . (int) $have[ $name ]['height'];

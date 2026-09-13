@@ -1091,3 +1091,114 @@ table.sbsk-report tr.is-extra {
 table.sbsk-report tr.sbsk-report__morerow td {
 	padding-top: 10px;
 }
+
+/* Sizes made by WordPress and other plugins */
+.sbsk-othersizes {
+	margin-top: 18px;
+	padding-top: 16px;
+	border-top: 1px solid #e6e7e8;
+}
+
+.sbsk-othersizes h3 {
+	margin: 0 0 4px;
+	font-size: 13px;
+}
+
+.sbsk-othersizes__list {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+	gap: 4px 16px;
+	margin: 10px 0 0;
+	font-size: 12px;
+}
+
+.sbsk-othersizes__list li {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+	margin: 0;
+	padding: 3px 0;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.sbsk-othersizes__list code {
+	background: none;
+	padding: 0;
+	font-size: 12px;
+}
+
+.sbsk-othersizes__list span {
+	color: #646970;
+	white-space: nowrap;
+}
+
+/* Choosing which sizes a forced rebuild remakes */
+.sbsk-sizepicker {
+	margin: 0 0 20px;
+	padding: 14px 16px;
+	background: #f6f7f7;
+	border-radius: 6px;
+}
+
+.sbsk-sizepicker__head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 10px;
+	font-size: 13px;
+}
+
+.sbsk-sizepicker__head span {
+	display: flex;
+	gap: 12px;
+	font-size: 12px;
+}
+
+.sbsk-sizepicker__list {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+	gap: 4px 16px;
+}
+
+.sbsk-sizepicker__list label {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 12px;
+}
+
+/* Room above the size picker */
+.sbsk-sizepicker {
+	margin-top: 16px;
+}
+
+/* What each image gained, as it happens */
+.sbsk-progress__log {
+	margin: 10px 0 0;
+	max-height: 220px;
+	overflow-y: auto;
+	font-size: 12px;
+}
+
+.sbsk-progress__log > li {
+	margin: 0 0 8px;
+}
+
+.sbsk-progress__log ul {
+	margin: 2px 0 0 4px;
+}
+
+.sbsk-progress__log ul li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	color: #50575e;
+}
+
+.sbsk-tick {
+	color: #00681f;
+	font-weight: 600;
+}
