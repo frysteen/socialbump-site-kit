@@ -59,7 +59,8 @@ class SBSK_Transfer {
 			$payload['options'][ $key ] = get_option( $option, [] );
 		}
 
-		$host = wp_parse_url( home_url(), PHP_URL_HOST );
+		// Dots do not survive a filename, so the host reads as bricks-socialbump-com-au.
+		$host = str_replace( '.', '-', (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
 		$name = 'site-kit-settings-' . $host . '-' . gmdate( 'Y-m-d' ) . '.json';
 		$json = wp_json_encode( $payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 

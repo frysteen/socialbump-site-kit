@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.4.7
+Stable tag: 0.4.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 0.4.8 =
+* Exported settings file name reads properly for the site it came from.
+
 = 0.4.7 =
 * Fixed saving one group's page wiping the switches for every other group. Modules that reverted to their defaults will need setting again once.
 * Updates page can now export the settings to a JSON file and import them on another site.
