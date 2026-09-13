@@ -156,20 +156,17 @@ class SBSK_Images_Rebuild {
 			return $result;
 		}
 
-		/**
-		 * wp_create_image_subsizes only makes what is absent, so existing files
-		 * are left alone and nothing is compressed twice.
-		 */
-		if ( function_exists( 'wp_create_image_subsizes' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/image.php';
-			wp_create_image_subsizes( $file, $id );
-		}
-
-		$result['built'] = array_values( array_diff( $wanted_missing, self::missing( $id ) ) );
+		$result['built'] = self::build( $id );
 
 		return $result;
 	}
-	/** Build the sizes this attachment is missing. Nothing is deleted. */
+	/**
+	 * Build the sizes this attachment is missing. Nothing else is touched.
+	 *
+	 * Each size is made straight from the file rather than by asking WordPress to
+	 * rebuild everything, so existing thumbnails keep their names and are not
+	 * written over.
+	 */
 	public static function build( $id ) {
 		$built = [];
 
@@ -183,21 +180,56 @@ class SBSK_Images_Rebuild {
 			return $built;
 		}
 
-		$wanted = self::missing( $id );
+		$meta    = (array) wp_get_attachment_metadata( $id );
+		$wanted  = self::missing( $id, $meta );
 
 		if ( ! $wanted ) {
 			return $built;
 		}
 
-		require_once ABSPATH . 'wp-admin/includes/image.php';
+		$folder    = trailingslashit( dirname( $file ) );
+		$base      = self::base_name( $id, $meta );
+		$extension = pathinfo( $file, PATHINFO_EXTENSION );
 
-		if ( function_exists( 'wp_create_image_subsizes' ) ) {
-			wp_create_image_subsizes( $file, $id );
+		foreach ( $wanted as $name ) {
+			$width = (int) str_replace( 'image-', '', $name );
+
+			if ( $width < 1 ) {
+				continue;
+			}
+
+			$editor = wp_get_image_editor( $file );
+
+			if ( is_wp_error( $editor ) ) {
+				continue;
+			}
+
+			$editor->resize( $width, 9999, false );
+
+			$size   = $editor->get_size();
+			$target = $folder . $base . '-' . (int) $size['width'] . 'x' . (int) $size['height'] . '.' . $extension;
+			$saved  = $editor->save( $target );
+
+			if ( is_wp_error( $saved ) || empty( $saved['file'] ) ) {
+				continue;
+			}
+
+			$meta['sizes'][ $name ] = [
+				'file'      => $saved['file'],
+				'width'     => (int) $saved['width'],
+				'height'    => (int) $saved['height'],
+				'mime-type' => $saved['mime-type'],
+			];
+
+			$built[] = $name;
 		}
 
-		return array_values( array_diff( $wanted, self::missing( $id ) ) );
-	}
+		if ( $built ) {
+			wp_update_attachment_metadata( $id, $meta );
+		}
 
+		return $built;
+	}
 	/** Remove sizes we own that are no longer wanted. Nothing is built. */
 	public static function clean( $id ) {
 		$result = [ 'removed' => [], 'files' => 0 ];
@@ -260,5 +292,33 @@ class SBSK_Images_Rebuild {
 		}
 
 		return $count;
+	}
+	/**
+	 * The name the existing thumbnails were built from.
+	 *
+	 * WordPress names a size after whichever file it was made from, and for a
+	 * large upload that is the original rather than the scaled copy it keeps as the
+	 * attachment. Taking the name from a size that already exists keeps anything we
+	 * add in step with what is already there.
+	 */
+	public static function base_name( $id, array $meta ) {
+		foreach ( (array) ( $meta['sizes'] ?? [] ) as $size ) {
+			if ( empty( $size['file'] ) ) {
+				continue;
+			}
+
+			$name = pathinfo( $size['file'], PATHINFO_FILENAME );
+			$name = preg_replace( '/-\d+x\d+$/', '', $name );
+
+			if ( $name !== '' ) {
+				return $name;
+			}
+		}
+
+		// Nothing to copy, so fall back to the original upload if there is one.
+		$original = function_exists( 'wp_get_original_image_path' ) ? wp_get_original_image_path( $id ) : '';
+		$source   = $original ? $original : get_attached_file( $id );
+
+		return pathinfo( (string) $source, PATHINFO_FILENAME );
 	}
 }

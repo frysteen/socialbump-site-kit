@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.3.2
+Stable tag: 0.3.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,10 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 0.3.3 =
+* Fix: building a missing size no longer asks WordPress to rebuild the whole attachment.
+* On a large upload that renamed every thumbnail after the scaled copy, leaving the previous set behind as orphans. Sizes are now made one at a time, keeping the names already in use.
+
 = 0.3.2 =
 * Change: a file is opened and checked before it is deleted as an orphan, so something merely named like an image is left alone.
 
