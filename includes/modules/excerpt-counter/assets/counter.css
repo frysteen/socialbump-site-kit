@@ -1,0 +1,18 @@
+/* Excerpt character counter */
+.sbsk-excerpt-counter {
+	margin: 6px 0 0;
+	color: #00681f;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.4;
+	text-align: right;
+}
+
+.sbsk-excerpt-counter.is-over {
+	color: #d63638;
+}
+
+/* Classic editor: the box is narrow, so keep it tight under the field */
+#postexcerpt .sbsk-excerpt-counter {
+	margin: 4px 0 0;
+}

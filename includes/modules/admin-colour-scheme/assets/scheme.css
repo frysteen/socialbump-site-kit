@@ -1,0 +1,384 @@
+/**
+ * SocialBUMP admin colour scheme.
+ *
+ * Loaded after WordPress's Midnight stylesheet, so this only changes what needs
+ * to differ: the SocialBUMP dark greys for the menu, and the brand green in
+ * place of Midnight's red. Green is bright, so anything sitting on it uses the
+ * dark ink colour rather than white.
+ */
+
+:root {
+	--sbsk-primary: #85df07;
+	--sbsk-primary-dark: #6fbd05;
+	/* Readable as text, a border, or behind white text on a white page. */
+	--sbsk-deep: #457a03;
+	--sbsk-deep-hover: #3d6b03;
+	--sbsk-secondary: #00ccff;
+	--sbsk-ink: #16171d;
+	--sbsk-menu: #333c42;
+	--sbsk-submenu: #232a2e;
+	--sbsk-text: #e9e9ea;
+}
+
+/* Menu */
+#adminmenu,
+#adminmenuback,
+#adminmenuwrap {
+	background: var(--sbsk-menu);
+}
+
+#adminmenu .wp-submenu,
+#adminmenu .wp-has-current-submenu .wp-submenu,
+#adminmenu a.wp-has-current-submenu:focus + .wp-submenu,
+.folded #adminmenu .wp-has-current-submenu .wp-submenu {
+	background: var(--sbsk-submenu);
+}
+
+#adminmenu a {
+	color: var(--sbsk-text);
+}
+
+#adminmenu div.wp-menu-image:before {
+	color: #a7aaad;
+}
+
+/* Hover paints the whole row green. Text and icons stay white, as Midnight has them. */
+#adminmenu a:hover,
+#adminmenu li.menu-top:hover,
+#adminmenu li.menu-top > a:focus,
+#adminmenu li.opensub > a.menu-top,
+#adminmenu li > a.menu-top:focus {
+	background: var(--sbsk-primary);
+	color: #fff;
+}
+
+/* Submenus keep their dark background, so links go green on hover */
+#adminmenu .wp-submenu a:hover,
+#adminmenu .wp-submenu a:focus {
+	background: transparent;
+	color: var(--sbsk-primary);
+}
+
+#adminmenu li:hover div.wp-menu-image:before,
+#adminmenu li a:focus div.wp-menu-image:before,
+#adminmenu li.opensub div.wp-menu-image:before {
+	color: var(--sbsk-primary);
+}
+
+/* Current menu item: green bar, white text and icons */
+#adminmenu li.current a.menu-top,
+#adminmenu li.wp-has-current-submenu a.wp-has-current-submenu,
+#adminmenu .wp-has-current-submenu .wp-submenu .wp-submenu-head,
+.folded #adminmenu li.current.menu-top,
+.folded #adminmenu li.wp-has-current-submenu {
+	background: var(--sbsk-primary);
+	color: #fff;
+	text-shadow: none;
+}
+
+#adminmenu .wp-submenu li.current,
+#adminmenu .wp-submenu li.current a,
+#adminmenu .wp-submenu li.current a:focus,
+#adminmenu .wp-submenu li.current a:hover,
+#adminmenu a.wp-has-current-submenu:focus + .wp-submenu li.current a {
+	color: var(--sbsk-primary);
+	font-weight: 600;
+}
+
+/* Update and comment bubbles */
+#adminmenu .awaiting-mod,
+#adminmenu .update-plugins,
+#adminmenu li.current a.menu-top .update-plugins,
+#adminmenu li.current a.menu-top .awaiting-mod,
+#adminmenu li a.wp-has-current-submenu .update-plugins,
+#wp-admin-bar-comments .count-0 {
+	background: var(--sbsk-ink);
+	color: var(--sbsk-primary);
+}
+
+/* Collapse button */
+#collapse-button {
+	color: #a7aaad;
+}
+
+#collapse-button:hover,
+#collapse-button:focus {
+	background: var(--sbsk-primary);
+	color: #fff;
+}
+
+/* Admin bar */
+#wpadminbar {
+	background: var(--sbsk-menu);
+}
+
+#wpadminbar .ab-top-menu > li:hover > .ab-item,
+#wpadminbar .ab-top-menu > li.hover > .ab-item,
+#wpadminbar .ab-top-menu > li > .ab-item:focus,
+#wpadminbar.nojq .quicklinks .ab-top-menu > li > .ab-item:focus {
+	background: var(--sbsk-submenu);
+	color: var(--sbsk-primary);
+}
+
+#wpadminbar .menupop .ab-sub-wrapper,
+#wpadminbar .shortlink-input {
+	background: var(--sbsk-submenu);
+}
+
+#wpadminbar .ab-submenu .ab-item:hover,
+#wpadminbar .ab-submenu .ab-item:focus,
+#wpadminbar li .ab-item:focus .ab-icon:before,
+#wpadminbar li a:focus .ab-icon:before {
+	color: var(--sbsk-primary);
+}
+
+/* Primary buttons */
+.wp-core-ui .button-primary {
+	background: var(--sbsk-deep);
+	border-color: var(--sbsk-deep);
+	color: #fff;
+	text-shadow: none;
+	box-shadow: none;
+	font-weight: 600;
+}
+
+.wp-core-ui .button-primary:hover,
+.wp-core-ui .button-primary:focus {
+	background: var(--sbsk-deep-hover);
+	border-color: var(--sbsk-deep-hover);
+	color: #fff;
+}
+
+.wp-core-ui .button-primary:focus {
+	box-shadow: 0 0 0 1px #fff, 0 0 0 3px var(--sbsk-deep);
+}
+
+.wp-core-ui .button-primary:disabled,
+.wp-core-ui .button-primary.disabled {
+	background: #a8cf7d !important;
+	border-color: #a8cf7d !important;
+	color: #fff !important;
+}
+
+/* Links and focus rings */
+a:hover,
+a:active,
+a:focus {
+	color: var(--sbsk-deep);
+}
+
+.wp-core-ui input:focus,
+.wp-core-ui select:focus,
+.wp-core-ui textarea:focus {
+	border-color: var(--sbsk-deep);
+	box-shadow: 0 0 0 1px var(--sbsk-primary-dark);
+}
+
+/* Tabs, pagination and other small accents */
+.wrap .add-new-h2:hover,
+.wrap .page-title-action:hover,
+.tablenav .tablenav-pages a:hover,
+.tablenav .tablenav-pages a:focus {
+	background: var(--sbsk-ink);
+	color: var(--sbsk-primary);
+	border-color: var(--sbsk-ink);
+}
+
+.subsubsub a.current,
+.subsubsub a:hover {
+	color: var(--sbsk-deep);
+}
+
+/* Media library selection */
+.wp-core-ui .attachment.selected .check {
+	background: var(--sbsk-primary);
+	box-shadow: 0 0 0 1px #fff, 0 0 0 2px var(--sbsk-primary);
+}
+/**
+ * Core uses --wp-admin-theme-color for checkboxes, radios, the active plugin
+ * row strip, range sliders and similar. WordPress schemes do not set it, so
+ * without this those stay the default blue.
+ */
+:root:root {
+	--wp-admin-theme-color: #457a03;
+	--wp-admin-theme-color--rgb: 69, 122, 3;
+	--wp-admin-theme-color-darker-10: #3d6b03;
+	--wp-admin-theme-color-darker-20: #345c02;
+	/* The block editor's own accent token, used by its buttons and controls. */
+	--wp-components-color-accent: #457a03;
+	--wp-components-color-accent-darker-10: #3d6b03;
+	--wp-components-color-accent-darker-20: #345c02;
+}
+
+
+/* Highlight helpers used across the admin */
+.wp-core-ui .wp-ui-highlight {
+	background-color: var(--sbsk-primary);
+	color: #fff;
+}
+
+.wp-core-ui .wp-ui-text-highlight {
+	color: var(--sbsk-deep);
+}
+
+/* Progress bars, pointers and media */
+.media-item .bar,
+.media-progress-bar div,
+.theme-browser .theme.active .theme-name,
+.widgets-chooser li.widgets-chooser-selected,
+.wp-responsive-open div#wp-responsive-toggle a {
+	background: var(--sbsk-primary);
+	color: #fff;
+}
+
+.wp-pointer .wp-pointer-content h3 {
+	background-color: var(--sbsk-primary);
+	border-color: var(--sbsk-deep);
+	color: var(--sbsk-ink);
+}
+
+.wp-pointer .wp-pointer-content h3:before {
+	color: var(--sbsk-ink);
+}
+
+.wp-pointer.wp-pointer-top .wp-pointer-arrow,
+.wp-pointer.wp-pointer-top .wp-pointer-arrow-inner,
+.wp-pointer.wp-pointer-undefined .wp-pointer-arrow,
+.wp-pointer.wp-pointer-undefined .wp-pointer-arrow-inner {
+	border-bottom-color: var(--sbsk-primary);
+}
+
+.details.attachment {
+	box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 7px var(--sbsk-primary);
+}
+
+.media-selection .attachment.selection.details .thumbnail {
+	box-shadow: 0 0 0 1px #fff, 0 0 0 3px var(--sbsk-deep);
+}
+
+/* Editor menus */
+.mce-container.mce-menu .mce-menu-item:hover,
+.mce-container.mce-menu .mce-menu-item.mce-selected,
+.mce-container.mce-menu .mce-menu-item:focus,
+.mce-container.mce-menu .mce-menu-item-normal.mce-active {
+	background: var(--sbsk-primary);
+	color: #fff;
+}
+
+/**
+ * Block editor buttons. The accent token above covers most of it, but the
+ * publish and save buttons are styled directly, so they are set here too.
+ */
+.components-button.is-primary,
+.editor-post-publish-button,
+.editor-post-publish-panel__toggle {
+	background: var(--sbsk-deep);
+	border-color: var(--sbsk-deep);
+	color: #fff;
+	box-shadow: none;
+}
+
+.components-button.is-primary:hover:not(:disabled),
+.components-button.is-primary:focus:not(:disabled),
+.editor-post-publish-button:hover:not(:disabled),
+.editor-post-publish-panel__toggle:hover:not(:disabled) {
+	background: var(--sbsk-deep-hover);
+	border-color: var(--sbsk-deep-hover);
+	color: #fff;
+}
+
+.components-button.is-secondary,
+.components-button.is-tertiary,
+.components-button.is-link {
+	color: var(--sbsk-deep);
+}
+
+/**
+ * The block editor builds a wrapper at runtime and sets its colour tokens as
+ * an inline style. An inline value on an ancestor beats anything declared on
+ * :root, so the tokens are set again inside the editor, where they win.
+ */
+#editor,
+#editor *,
+.block-editor__container,
+.block-editor__container *,
+.interface-interface-skeleton,
+.interface-interface-skeleton * {
+	--wp-admin-theme-color: #457a03;
+	--wp-admin-theme-color--rgb: 69, 122, 3;
+	--wp-admin-theme-color-darker-10: #3d6b03;
+	--wp-admin-theme-color-darker-20: #345c02;
+	--wp-components-color-accent: #457a03;
+	--wp-components-color-accent-darker-10: #3d6b03;
+	--wp-components-color-accent-darker-20: #345c02;
+}
+
+/* Customizer and nav menus: the last places Midnight uses its accent */
+.wp-core-ui #customize-controls .control-section:hover > .accordion-section-title,
+.wp-core-ui #customize-controls .control-section .accordion-section-title:hover,
+.wp-core-ui #customize-controls .control-section.open .accordion-section-title,
+.wp-core-ui .customize-panel-back:hover,
+.wp-core-ui .customize-panel-back:focus,
+.wp-core-ui .customize-section-back:hover,
+.wp-core-ui .customize-section-back:focus,
+.wp-core-ui .control-panel-themes .customize-themes-section-title:focus,
+.wp-core-ui .control-panel-themes .customize-themes-section-title:hover {
+	border-left-color: var(--sbsk-deep);
+}
+
+.wp-core-ui .customize-controls-close:focus,
+.wp-core-ui .customize-controls-close:hover,
+.wp-core-ui .customize-controls-preview-toggle:focus,
+.wp-core-ui .customize-controls-preview-toggle:hover,
+.wp-core-ui .wp-full-overlay-footer .devices button:focus,
+.wp-core-ui .wp-full-overlay-footer .devices button.active:hover {
+	border-bottom-color: var(--sbsk-deep);
+}
+
+.wp-core-ui .wp-full-overlay-footer .devices button:hover:before,
+.wp-core-ui .wp-full-overlay-footer .devices button:focus:before,
+.wp-core-ui .wp-full-overlay .collapse-sidebar:hover,
+.wp-core-ui .wp-full-overlay .collapse-sidebar:focus {
+	color: var(--sbsk-deep);
+}
+
+.wp-core-ui .control-panel-themes .theme-section .customize-themes-section-title.selected:after {
+	background: var(--sbsk-deep);
+}
+
+.wp-core-ui .customize-control .attachment-media-view .button-add-media:focus {
+	border-color: var(--sbsk-deep);
+	box-shadow: 0 0 0 1px var(--sbsk-deep);
+}
+
+.nav-menus-php .item-edit:focus:before,
+.wp-core-ui .customize-screen-options-toggle:focus:before,
+.wp-core-ui #customize-controls .customize-info .customize-help-toggle:focus:before,
+.wp-core-ui.wp-customizer button:focus .toggle-indicator:before,
+.wp-core-ui .wp-full-overlay .collapse-sidebar:hover .collapse-sidebar-arrow,
+.wp-core-ui .wp-full-overlay .collapse-sidebar:focus .collapse-sidebar-arrow {
+	box-shadow: 0 0 0 1px #a8cf7d, 0 0 2px 1px var(--sbsk-deep);
+}
+
+.wp-core-ui.wp-customizer .theme-overlay .theme-header .close:focus,
+.wp-core-ui.wp-customizer .theme-overlay .theme-header .close:hover,
+.wp-core-ui.wp-customizer .theme-overlay .theme-header .right:focus,
+.wp-core-ui.wp-customizer .theme-overlay .theme-header .right:hover {
+	border-bottom-color: var(--sbsk-deep);
+}
+
+.theme-browser .theme.add-new-theme a:hover span:after,
+.theme-browser .theme.add-new-theme a:focus span:after {
+	color: var(--sbsk-deep);
+}
+
+.attachment.details .check {
+	background-color: var(--sbsk-primary);
+	box-shadow: 0 0 0 1px #fff, 0 0 0 2px var(--sbsk-primary);
+}
+
+body.more-filters-opened .more-filters:hover,
+body.more-filters-opened .more-filters:focus {
+	background-color: var(--sbsk-deep);
+	color: #fff;
+}
