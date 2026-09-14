@@ -1361,3 +1361,45 @@ table.sbsk-report tr.sbsk-report__morerow td {
 	line-height: 1.6;
 	background: #f6f7f7;
 }
+
+/* Publishing: the token and the zip stack in one column, publishing beside them.
+   Placed rather than reordered, so the markup and the reading order stay as they are. */
+.sbsk-release .sbsk-grid {
+	display: grid;
+	grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.1fr);
+	align-items: start;
+	gap: 16px;
+}
+
+.sbsk-release .sbsk-grid > .sbsk-card:nth-child(1) {
+	grid-column: 1;
+	grid-row: 1;
+}
+
+.sbsk-release .sbsk-grid > .sbsk-card:nth-child(2) {
+	grid-column: 2;
+	grid-row: 1 / span 2;
+}
+
+.sbsk-release .sbsk-grid > .sbsk-card:nth-child(3) {
+	grid-column: 1;
+	grid-row: 2;
+}
+
+@media (max-width: 960px) {
+	.sbsk-release .sbsk-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.sbsk-release .sbsk-grid > .sbsk-card:nth-child(1),
+	.sbsk-release .sbsk-grid > .sbsk-card:nth-child(2),
+	.sbsk-release .sbsk-grid > .sbsk-card:nth-child(3) {
+		grid-column: 1;
+		grid-row: auto;
+	}
+}
+
+/* The release notes box, tall enough to match the two cards beside it. */
+.sbsk-release textarea {
+	min-height: 160px;
+}

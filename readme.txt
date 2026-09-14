@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,13 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.0.1 =
+* A SocialBUMP overview page collects every plugin on the site, and lets all of them be published from one screen.
+* Updating no longer leaves the plugin missing from the menus until you navigate away.
+* A site that is not the publishing hub now clears the GitHub token and release notes it has no use for.
+* A SocialBUMP Hub page gathers every plugin on the site, with one place to publish them all from. It only appears on the publishing hub.
+* Menus now carry the SocialBUMP mark, and publishing lays out in two columns instead of three stretched cards.
+
 = 1.0.0 =
 * Admin bar item is now shared: with more than one SocialBUMP plugin active they sit together under a single SocialBUMP menu, each with its own pages.
 * Save buttons stay greyed out until something is actually changed, with a reminder that follows you down the page while changes are unsaved.

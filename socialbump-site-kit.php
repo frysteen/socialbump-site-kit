@@ -3,7 +3,7 @@
  * Plugin Name: SocialBUMP Site Kit
  * Plugin URI:  https://socialbump.com.au
  * Description: SocialBUMP base styling, ACF fields, shortcodes and admin tweaks. Switch each feature on or off under SB Site Kit.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author:      SocialBUMP
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SBSK_VERSION', '1.0.0' );
+define( 'SBSK_VERSION', '1.0.1' );
 define( 'SBSK_FILE', __FILE__ );
 define( 'SBSK_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SBSK_URL', plugin_dir_url( __FILE__ ) );
@@ -125,6 +125,7 @@ function sbsk_log_change( $text ) {
 function sbsk_boot() {
 	require_once SBSK_PATH . 'includes/class-sbsk-modules.php';
 	require_once SBSK_PATH . 'includes/class-socialbump-admin-bar.php';
+require_once SBSK_PATH . 'includes/class-socialbump-overview.php';
 	require_once SBSK_PATH . 'includes/class-sbsk-settings.php';
 	require_once SBSK_PATH . 'includes/class-sbsk-updates.php';
 	require_once SBSK_PATH . 'includes/class-sbsk-transfer.php';
@@ -143,3 +144,61 @@ function sbsk_boot() {
 	}
 }
 add_action( 'plugins_loaded', 'sbsk_boot' );
+
+/**
+ * Make sure the new files are the ones that run.
+ *
+ * Updating a plugin swaps its files out mid request. If you were on one of its
+ * own pages at the time, the page you land on afterwards can still be running
+ * the old code, or code caught halfway through being replaced, so its menus
+ * never register and the plugin appears to vanish until you go somewhere else.
+ *
+ * Clearing the compiled copies as soon as the update finishes means the next
+ * request reads what is actually on disk.
+ */
+function sbsk_forget_compiled( $upgrader, $extra ) {
+	if ( ! function_exists( 'opcache_invalidate' ) ) {
+		return;
+	}
+
+	$ours = plugin_basename( SBSK_FILE );
+	$mine = isset( $extra['plugins'] ) && in_array( $ours, (array) $extra['plugins'], true );
+
+	// A single update reports the plugin on its own rather than in a list.
+	if ( ! $mine && isset( $extra['plugin'] ) && $extra['plugin'] === $ours ) {
+		$mine = true;
+	}
+
+	if ( ! $mine ) {
+		return;
+	}
+
+	$files = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( SBSK_PATH, FilesystemIterator::SKIP_DOTS ) );
+
+	foreach ( $files as $file ) {
+		if ( $file->getExtension() === 'php' ) {
+			@opcache_invalidate( $file->getPathname(), true );
+		}
+	}
+}
+add_action( 'upgrader_process_complete', 'sbsk_forget_compiled', 10, 2 );
+
+/**
+ * Nothing about publishing belongs on a site that is not the hub.
+ *
+ * This site is the blueprint new sites are built from, so whatever sits in its
+ * database travels with every copy. A GitHub token has no business on a client
+ * site, and the release notes waiting to be published are only noise there.
+ */
+function sbsk_tidy_away_hub_data() {
+	if ( sbsk_is_hub() ) {
+		return;
+	}
+
+	foreach ( [ 'sbsk_github_token', 'sbsk_pending_changes', 'sbsk_latest_release' ] as $option ) {
+		if ( get_option( $option ) !== false ) {
+			delete_option( $option );
+		}
+	}
+}
+add_action( 'admin_init', 'sbsk_tidy_away_hub_data' );
