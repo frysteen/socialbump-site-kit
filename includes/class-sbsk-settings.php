@@ -26,8 +26,6 @@ class SBSK_Settings {
 		add_action( 'admin_post_sbsk_save_groups', [ $this, 'save_groups' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'styles' ] );
 		add_action( 'admin_bar_menu', [ $this, 'admin_bar' ], 100 );
-		add_action( 'admin_head', [ $this, 'bar_styles' ] );
-		add_action( 'wp_head', [ $this, 'bar_styles' ] );
 	}
 
 	/**
@@ -242,7 +240,12 @@ class SBSK_Settings {
 				<a class="sbsk-header__home" href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::PAGE_SLUG ) ); ?>">
 					<img class="sbsk-header__logo" src="<?php echo esc_url( SBSK_URL . 'assets/img/socialbump-logo-light.svg' ); ?>" alt="SocialBUMP" width="203" height="28">
 				</a>
-				<h1 class="sbsk-header__title"><?php echo esc_html( $title ); ?></h1>
+				<h1 class="sbsk-header__title">
+					<?php echo esc_html__( 'Site Kit', 'sb-site-kit' ); ?>
+					<?php if ( $title !== 'Site Kit' ) : ?>
+						<span class="sbsk-header__page"><?php echo esc_html( $title ); ?></span>
+					<?php endif; ?>
+				</h1>
 				<?php
 				$state   = get_site_transient( 'update_plugins' );
 				$file    = plugin_basename( SBSK_FILE );
@@ -275,13 +278,13 @@ class SBSK_Settings {
 		$states   = SBSK_Modules::instance()->group_states();
 
 		echo '<div class="wrap sbsk-wrap">';
-		$this->render_header( __( 'Site Kit', 'sb-site-kit' ), __( 'Switch on the parts of the kit this site needs. Each one adds its own page below.', 'sb-site-kit' ) );
+		$this->render_header( __( 'Modules', 'sb-site-kit' ), __( 'Switch on the parts of the kit this site needs. Each one adds its own page below.', 'sb-site-kit' ) );
 
 		if ( isset( $_GET['updated'] ) ) {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'sb-site-kit' ) . '</p></div>';
 		}
 
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<form method="post" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		echo '<input type="hidden" name="action" value="sbsk_save_groups">';
 		wp_nonce_field( 'sbsk_save_groups' );
 		echo '<section class="sbsk-section"><div class="sbsk-section__head"><h2>' . esc_html__( 'Modules', 'sb-site-kit' ) . '</h2><p>' . esc_html__( 'Each one switched on adds its own page to the menu.', 'sb-site-kit' ) . '</p></div>';
@@ -370,7 +373,7 @@ class SBSK_Settings {
 			return;
 		}
 
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<form method="post" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		echo '<input type="hidden" name="action" value="sbsk_save">';
 		echo '<input type="hidden" name="sbsk_group" value="' . esc_attr( $group ) . '">';
 		wp_nonce_field( 'sbsk_save' );
@@ -454,10 +457,14 @@ class SBSK_Settings {
 	}
 
 	/**
-	 * A shortcut in the admin bar, listing the same sub pages as the menu.
+	 * Hand our pages to the shared SocialBUMP menu in the admin bar.
+	 *
+	 * On its own the plugin sits on the bar as before. Alongside the other
+	 * SocialBUMP plugins they share one item, and an update waiting here shows
+	 * as an amber dot on it.
 	 */
 	public function admin_bar( $bar ) {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( 'manage_options' ) || ! class_exists( 'SocialBUMP_Admin_Bar' ) ) {
 			return;
 		}
 
@@ -467,45 +474,33 @@ class SBSK_Settings {
 		$page    = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
 		$current = isset( $items[ $page ] ) ? $page : '';
 
-		$bar->add_node(
-			[
-				'id'    => 'sbsk',
-				'title' => esc_html__( 'SB Site Kit', 'sb-site-kit' ),
-				'href'  => admin_url( 'admin.php?page=' . self::PAGE_SLUG ),
-				'meta'  => [ 'class' => $current !== '' ? 'sb-bar-current' : '' ],
-			]
-		);
+		$state   = get_site_transient( 'update_plugins' );
+		$file    = plugin_basename( SBSK_FILE );
+		$pending = ( $state && ! empty( $state->response[ $file ]->new_version ) ) ? $state->response[ $file ]->new_version : '';
+
+		$pages = [];
 
 		foreach ( $items as $slug => $title ) {
-			$bar->add_node(
-				[
-					'id'     => 'sbsk-bar-' . sanitize_key( $slug ),
-					'parent' => 'sbsk',
-					'title'  => esc_html( $title ),
-					'href'   => admin_url( 'admin.php?page=' . $slug ),
-					'meta'   => [ 'class' => $slug === $current ? 'sb-bar-current' : '' ],
-				]
-			);
-		}
-	}
-
-	/**
-	 * Marks the page you are on in the admin bar shortcut.
-	 *
-	 * Printed rather than enqueued, because the bar also shows on the front end
-	 * where the plugin admin stylesheet is not loaded.
-	 */
-	public function bar_styles() {
-		if ( ! is_admin_bar_showing() || ! current_user_can( 'manage_options' ) ) {
-			return;
+			$pages[] = [
+				'title'   => $title,
+				'href'    => admin_url( 'admin.php?page=' . $slug ),
+				'current' => $slug === $current,
+			];
 		}
 
-		// The accent from whichever admin colour scheme the user has chosen.
-		$accent = $this->accent_colour();
-
-		echo '<style>#wpadminbar .sb-bar-current > .ab-item{color:' . esc_attr( $accent ) . ';font-weight:600;}</style>';
+		SocialBUMP_Admin_Bar::register(
+			[
+				'id'              => 'site-kit',
+				'label'           => __( 'Site Kit', 'sb-site-kit' ),
+				'href'            => admin_url( 'admin.php?page=' . self::PAGE_SLUG ),
+				'items'           => $pages,
+				'attention'       => $pending !== '',
+				/* translators: %s: version number */
+				'attention_title' => $pending !== '' ? sprintf( __( 'Version %s is available', 'sb-site-kit' ), $pending ) : '',
+				'current'         => $current !== '',
+			]
+		);
 	}
-
 	/** The pages the admin bar shortcut lists, in menu order. */
 	private function bar_items() {
 		$sections = $this->sections();
@@ -592,6 +587,13 @@ class SBSK_Settings {
 		$ver  = file_exists( $file ) ? SBSK_VERSION . '.' . filemtime( $file ) : SBSK_VERSION;
 
 		wp_enqueue_style( 'sbsk-admin', SBSK_URL . 'assets/css/admin.css', [], $ver );
+
+		// Tells you when there is something to save, and when there is not.
+		$dirty = SBSK_PATH . 'assets/js/save-state.js';
+
+		if ( file_exists( $dirty ) ) {
+			wp_enqueue_script( 'sb-save-state', SBSK_URL . 'assets/js/save-state.js', [], SBSK_VERSION . '.' . filemtime( $dirty ), true );
+		}
 
 		// Match the card accent to the admin colour scheme the user has chosen.
 		wp_add_inline_style( 'sbsk-admin', ':root{--sbsk-accent:' . $this->accent_colour() . ';}' );
@@ -811,7 +813,7 @@ class SBSK_Settings {
 			<?php if ( empty( $modules ) ) : ?>
 				<p><?php esc_html_e( 'No modules found yet.', 'sb-site-kit' ); ?></p>
 			<?php else : ?>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<form method="post" data-sb-dirty action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="sbsk_save">
 					<?php wp_nonce_field( 'sbsk_save' ); ?>
 

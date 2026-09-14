@@ -1255,3 +1255,109 @@ table.sbsk-report tr.sbsk-report__morerow td {
 .sbsk-othersizes__save a {
 	font-size: 12px;
 }
+
+/* Unsaved changes: one look for the save button across the plugins.
+   The selectors carry .wp-core-ui and .button so they outrank WordPress's own
+   disabled and primary button rules, which are themselves marked important. */
+.wp-core-ui .button.sb-save--clean,
+.wp-core-ui .button.sb-save--clean:disabled,
+.wp-core-ui .button.sb-save--clean:hover,
+.wp-core-ui .button.sb-save--clean:focus,
+.wp-core-ui .button-primary.sb-save--clean,
+.wp-core-ui .button-primary.sb-save--clean:disabled,
+.wp-core-ui .button-primary.sb-save--clean:hover,
+.wp-core-ui .button-primary.sb-save--clean:focus {
+	background: transparent !important;
+	border: 1px solid #dcdcde !important;
+	color: #a7aaad !important;
+	box-shadow: none !important;
+	text-shadow: none !important;
+	opacity: 1 !important;
+	cursor: default;
+}
+
+.wp-core-ui .button.sb-save--dirty,
+.wp-core-ui .button.sb-save--dirty:hover,
+.wp-core-ui .button.sb-save--dirty:focus,
+.wp-core-ui .button-primary.sb-save--dirty,
+.wp-core-ui .button-primary.sb-save--dirty:hover,
+.wp-core-ui .button-primary.sb-save--dirty:focus {
+	background: #fdf8e8 !important;
+	border: 1px solid #dba617 !important;
+	color: #7a5a00 !important;
+	font-weight: 600;
+	box-shadow: none !important;
+	text-shadow: none !important;
+}
+
+.wp-core-ui .button.sb-save--dirty:hover,
+.wp-core-ui .button-primary.sb-save--dirty:hover {
+	background: #fcf0d4 !important;
+}
+
+/* The reminder that follows you down the page. */
+.sb-unsaved {
+	position: fixed;
+	top: 52px;
+	right: 24px;
+	z-index: 9999;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 16px;
+	background: #fdf8e8;
+	border: 1px solid #dba617;
+	border-radius: 6px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	color: #7a5a00;
+	font-size: 13px;
+	font-weight: 500;
+	line-height: 1.2;
+	cursor: pointer;
+}
+
+.sb-unsaved:hover {
+	background: #fcf0d4;
+}
+
+.sb-unsaved[hidden] {
+	display: none;
+}
+
+.sb-unsaved__dot {
+	display: inline-block;
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: #dba617;
+}
+
+/* The page name after the plugin name in the banner. */
+.wrap .sbsk-header__title .sbsk-header__page {
+	margin-left: 8px;
+	color: var(--sbsk-accent, #72aee6);
+	font-weight: 600;
+}
+
+/* The notes panel on the Publishing page. */
+.sbsk-docs {
+	min-height: 420px;
+	font-family: Menlo, Consolas, monospace;
+	font-size: 12px;
+	line-height: 1.6;
+	white-space: pre;
+	overflow-wrap: normal;
+	overflow-x: auto;
+}
+
+.sbsk-docs__heading {
+	margin: 18px 0 4px;
+	font-size: 13px;
+}
+
+.sbsk-docs__prompt {
+	font-family: Menlo, Consolas, monospace;
+	font-size: 12px;
+	line-height: 1.6;
+	background: #f6f7f7;
+}

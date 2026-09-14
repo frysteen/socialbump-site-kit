@@ -227,7 +227,7 @@ class SBSK_Images {
 		$post_url = esc_url( admin_url( 'admin-post.php' ) );
 
 
-		echo '<form method="post" action="' . $post_url . '">';
+		echo '<form method="post" data-sb-dirty action="' . $post_url . '">';
 		echo '<input type="hidden" name="action" value="sbsk_save_images">';
 		wp_nonce_field( 'sbsk_save_images' );
 

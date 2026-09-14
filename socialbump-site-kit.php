@@ -3,7 +3,7 @@
  * Plugin Name: SocialBUMP Site Kit
  * Plugin URI:  https://socialbump.com.au
  * Description: SocialBUMP base styling, ACF fields, shortcodes and admin tweaks. Switch each feature on or off under SB Site Kit.
- * Version:     0.4.8
+ * Version:     1.0.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author:      SocialBUMP
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SBSK_VERSION', '0.4.8' );
+define( 'SBSK_VERSION', '1.0.0' );
 define( 'SBSK_FILE', __FILE__ );
 define( 'SBSK_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SBSK_URL', plugin_dir_url( __FILE__ ) );
@@ -124,6 +124,7 @@ function sbsk_log_change( $text ) {
  */
 function sbsk_boot() {
 	require_once SBSK_PATH . 'includes/class-sbsk-modules.php';
+	require_once SBSK_PATH . 'includes/class-socialbump-admin-bar.php';
 	require_once SBSK_PATH . 'includes/class-sbsk-settings.php';
 	require_once SBSK_PATH . 'includes/class-sbsk-updates.php';
 	require_once SBSK_PATH . 'includes/class-sbsk-transfer.php';
@@ -136,6 +137,9 @@ function sbsk_boot() {
 	if ( sbsk_is_hub() ) {
 		require_once SBSK_PATH . 'includes/class-sbsk-release.php';
 		SBSK_Release::instance()->boot();
+
+		require_once SBSK_PATH . 'includes/class-sbsk-docs.php';
+		SBSK_Docs::boot();
 	}
 }
 add_action( 'plugins_loaded', 'sbsk_boot' );
