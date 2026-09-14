@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.0.2 =
+* New module: Force Gutenberg Page Refresh on Save, which reloads the editor once a save has finished so you see what was actually saved.
+
 = 1.0.1 =
 * A SocialBUMP overview page collects every plugin on the site, and lets all of them be published from one screen.
 * Updating no longer leaves the plugin missing from the menus until you navigate away.

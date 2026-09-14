@@ -62,6 +62,7 @@ Default says whether a fresh install has it on.
 | Excerpt Character Counter | on | Counts characters as you write an excerpt, in the block editor and the classic box, and warns when it runs long |
 | Excerpts For Pages | off | Gives pages an excerpt field, which WordPress only gives posts |
 | Shortcodes In Excerpts | off | Runs shortcodes written into an excerpt instead of printing them as text |
+| Force Gutenberg Page Refresh on Save | off | Refreshes the editor once a save has finished, so you see what was actually saved |
 | Images | on | The standard image sizes, plus tidy titles and alt text on upload, and the rebuild tools |
 | SocialBUMP Admin Colours | on | Adds the SocialBUMP admin colour scheme, chosen under Users, Profile. Based on Midnight with our palette in place of the red |
 | Hide Toolbar On The Front End | on | Tick the roles that lose the front end toolbar. Administrators keep their own profile setting |
@@ -90,6 +91,27 @@ loaded, so the script polls for it for ten seconds and binds to the editor own
 events rather than to the textarea. It counts trailing spaces, because they count
 in a meta description. Setting: max, a number.
 
+**Force Gutenberg Page Refresh on Save.** The block editor saves in the
+background and leaves you where you were, so anything the server changed during
+the save is not in front of you until you reload by hand. This watches the
+editor own save state through wp.data and reloads once it is done.
+
+Three things it has to get right, and they are the whole module:
+
+- An autosave is not a save you asked for, so it is ignored. Otherwise the page
+  would reload every minute while you type.
+- It waits for meta boxes as well as the post. WordPress sends those after the
+  post itself, so reloading when the post save finishes would cut off whatever
+  they were writing. ACF fields are the usual casualty. Tested with content and
+  ACF fields together: both survive.
+- A save that failed does not reload, so a dropped connection does not cost you
+  your work.
+
+The reload uses replace rather than a normal navigation, so the back button does
+not walk back through every save, and it carries a flag that raises a Saved
+snackbar afterwards, since the editor own notice does not survive a page load.
+It only loads where the block editor is running: the classic editor reloads on
+save already. Off by default, since it changes how saving feels.
 **Excerpts For Pages.** Adds excerpt support to the page post type on init. One
 line of work, but it means pages can carry a meta description and a card summary
 like any post. No settings.
@@ -304,6 +326,15 @@ admin_bar_menu priority 200.
 - The current page is white and bold, never the admin colour scheme accent:
   some accents are unreadable on the dark bar.
 - An action row marked sb-bar-action is-idle looks inactive and ignores hover.
+
+Two signals, and they mean different things. Keep them apart:
+
+- The dot is about this site: content waiting to be rebuilt, an update ready to
+  install. It is what someone looking after the site cares about.
+- Amber wording, and a small count beside it, is about the hub: changes noted but
+  not yet released. Publishing carries it, through attention and count on that
+  item. Never fold this into the dot, and never colour the dot for it: on a client
+  site there is nothing to publish and the distinction is the whole point.
 
 ### The SocialBUMP Hub page
 
