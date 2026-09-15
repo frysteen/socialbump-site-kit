@@ -30,8 +30,9 @@ class SBSK_Images_Orphans {
 		$known   = [];
 		$files   = [];
 		$metas   = [];
+		$backups = [];
 
-		$rows = $wpdb->get_results( "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE meta_key IN ( '_wp_attached_file', '_wp_attachment_metadata' )" );
+		$rows = $wpdb->get_results( "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE meta_key IN ( '_wp_attached_file', '_wp_attachment_metadata', '_wp_attachment_backup_sizes' )" );
 
 		foreach ( $rows as $row ) {
 			if ( $row->meta_key === '_wp_attached_file' ) {
@@ -39,10 +40,15 @@ class SBSK_Images_Orphans {
 				continue;
 			}
 
+			if ( $row->meta_key === '_wp_attachment_backup_sizes' ) {
+				$backups[ $row->post_id ] = maybe_unserialize( $row->meta_value );
+				continue;
+			}
+
 			$metas[ $row->post_id ] = maybe_unserialize( $row->meta_value );
 		}
 
-		foreach ( array_keys( $files + $metas ) as $id ) {
+		foreach ( array_keys( $files + $metas + $backups ) as $id ) {
 			$attached = isset( $files[ $id ] ) ? $files[ $id ] : '';
 			$meta     = isset( $metas[ $id ] ) && is_array( $metas[ $id ] ) ? $metas[ $id ] : [];
 			$relative = ! empty( $meta['file'] ) ? $meta['file'] : $attached;
@@ -65,6 +71,23 @@ class SBSK_Images_Orphans {
 			}
 
 			foreach ( (array) ( $meta['sizes'] ?? [] ) as $size ) {
+				if ( empty( $size['file'] ) ) {
+					continue;
+				}
+
+				self::add( $known, $folder . $size['file'] );
+			}
+
+			/**
+			 * Editing an image in WordPress writes a new set of files and keeps the
+			 * old ones, so Restore original image still works. They are recorded in
+			 * _wp_attachment_backup_sizes and belong to the attachment as much as
+			 * the current files do. Without this they look abandoned and get listed
+			 * for deletion, which would quietly take the undo away.
+			 */
+			$backup = isset( $backups[ $id ] ) && is_array( $backups[ $id ] ) ? $backups[ $id ] : [];
+
+			foreach ( $backup as $size ) {
 				if ( empty( $size['file'] ) ) {
 					continue;
 				}
@@ -268,6 +291,59 @@ class SBSK_Images_Orphans {
 	}
 
 
+	/**
+	 * The attachment a stray file came from, if it can be worked out.
+	 *
+	 * A size file is the original name with the dimensions on the end, so the
+	 * suffix comes off and what is left is looked for among the attached files.
+	 * Useful on the report: knowing a stray belongs to an attachment still in the
+	 * library is the difference between deleting it and leaving it alone.
+	 */
+	public static function attachment_for( $path ) {
+		global $wpdb;
+
+		$name = basename( $path );
+		$dot  = strrpos( $name, '.' );
+
+		if ( $dot === false ) {
+			return null;
+		}
+
+		$stem = substr( $name, 0, $dot );
+		$ext  = substr( $name, $dot );
+
+		// Both the file as it is, and the same name with a size suffix taken off.
+		$tries = [ $name ];
+		$bare  = preg_replace( '/-\d+x\d+$/', '', $stem );
+
+		if ( $bare !== $stem ) {
+			$tries[] = $bare . $ext;
+		}
+
+		foreach ( $tries as $try ) {
+			$id = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND ( meta_value = %s OR meta_value LIKE %s ) LIMIT 1",
+					$try,
+					'%/' . $wpdb->esc_like( $try )
+				)
+			);
+
+			if ( $id > 0 ) {
+				return [ 'id' => $id, 'title' => get_the_title( $id ) ];
+			}
+		}
+
+		// Otherwise it may be recorded as a backup from an edit.
+		$id = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attachment_backup_sizes' AND meta_value LIKE %s LIMIT 1",
+				'%' . $wpdb->esc_like( $name ) . '%'
+			)
+		);
+
+		return $id > 0 ? [ 'id' => $id, 'title' => get_the_title( $id ) ] : null;
+	}
 	/**
 	 * Where a file is mentioned, if anywhere.
 	 *

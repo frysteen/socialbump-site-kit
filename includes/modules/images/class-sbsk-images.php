@@ -265,7 +265,7 @@ class SBSK_Images {
 		echo '</div>';
 		echo '<div class="sbsk-width-actions">';
 		echo '<button type="button" class="button" id="sbsk-add-width">' . esc_html__( 'Add a width', 'sb-site-kit' ) . '</button>';
-		echo '<button type="submit" class="button sbsk-button--danger" name="sbsk_reset_sizes" value="1" id="sbsk-reset-widths">' . esc_html__( 'Reset to default sizes', 'sb-site-kit' ) . '</button>';
+		echo '<button type="submit" class="button sbsk-button--danger" name="sbsk_reset_sizes" value="1" data-sb-always-on id="sbsk-reset-widths">' . esc_html__( 'Reset to default sizes', 'sb-site-kit' ) . '</button>';
 		echo '</div>';
 		echo '</div>';
 

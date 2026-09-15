@@ -1449,3 +1449,110 @@ table.sbsk-report tr.sbsk-report__morerow td {
 	font-weight: 700;
 	line-height: 16px;
 }
+
+/* The orphan list: a thumbnail, the name, and the attachment it came from. */
+.sbsk-report__file {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.sbsk-report__thumb {
+	flex: 0 0 auto;
+	display: block;
+	width: 40px;
+	height: 40px;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	background: #f6f7f7;
+	overflow: hidden;
+}
+
+.sbsk-report__thumb img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.sbsk-report__name {
+	min-width: 0;
+}
+
+.sbsk-report__id {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: #f0f0f1;
+	color: #50575e;
+	font-size: 11px;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.sbsk-report__id:hover {
+	background: #e0e0e1;
+	color: #1d2327;
+}
+
+/* The rebuild log: one image to a row, with its own thumbnail. */
+.sbsk-log__row {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 8px 0;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.sbsk-log__thumb {
+	flex: 0 0 auto;
+	width: 44px;
+	height: 44px;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	background: #f6f7f7;
+	object-fit: cover;
+}
+
+.sbsk-log__detail {
+	min-width: 0;
+}
+
+.sbsk-log__detail ul {
+	margin: 2px 0 0;
+}
+
+/* The sizes panel on an attachment.
+   WordPress puts an extra field in a table row: a label column, and a field
+   cell floated right at 65% to sit beside it. The label is empty here, because
+   the panel carries its own title, so the column is taken down to nothing and
+   the field is given the full width. The float goes with it: it only existed to
+   sit the field beside a label that is no longer there, and its 1px margin is
+   what makes a full width float overflow. */
+.compat-item .compat-field-sbsk_sizes th.label {
+	display: none;
+	min-width: 0%;
+	width: 0%;
+}
+
+.compat-item .compat-field-sbsk_sizes .field {
+	float: none;
+	width: auto;
+	margin: 0;
+	padding: 0;
+}
+
+.sbsk-attachment-box {
+	margin: 12px 0 0;
+}
+
+.sbsk-attachment-box .hndle {
+	padding: 0 12px;
+	font-size: 13px;
+}
+
+.sbsk-attachment-box .inside {
+	margin: 0;
+	padding: 8px 12px 12px;
+}

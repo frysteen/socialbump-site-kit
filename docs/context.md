@@ -124,20 +124,111 @@ resolves too. No settings.
 ### Images
 
 **Images.** The largest module in the kit, and the one to be most careful with.
-Four classes: the sizes themselves, the batch rebuild, the media library tools,
-and orphan handling.
+Four classes: SBSK_Images for the sizes and the settings page, _Rebuild for the
+building and clearing, _Tools for the screens and every AJAX handler, and
+_Orphans for what is on disk but not in the database.
 
-- Registers the standard sizes on after_setup_theme, and adds them to the size
-  chooser in the editor through image_size_names_choose.
-- On add_attachment it tidies the file name and fills in alt text from the title,
-  so an upload called DSC_0042 does not end up as alt text.
-- Rebuilding runs over AJAX in batches, like the exporter: sbsk_images_count then
-  sbsk_images_batch, with a progress bar, so a big library cannot time out.
+#### The rule that everything else depends on
+
+A size counts as present only when its file is really there. Metadata is not
+proof, and treating it as proof caused the worst bug in this module.
+
+SBSK_Images_Rebuild::present( $id, $meta ) answers it, by checking each entry in
+the metadata against the disk. missing(), missing_all() and the per attachment
+panel all go through it. Anything new that asks what an attachment has must go
+through it too.
+
+What happened without it: a size was removed, its files were deleted, and the
+metadata entries stayed behind. Adding the size back left an entry pointing at a
+file that no longer existed, so the scan saw the entry, called it present, and
+reported nothing to build. 638 images sat with no 480 and nothing said a word.
+The same gap was showing in the details panel, which printed dimensions for a
+file that was not there. Three places, one wrong assumption.
+
+#### Sizes
+
+- Registered on after_setup_theme, and added to the editor size chooser through
+  image_size_names_choose.
+- Widths live in the module settings. Saving them changes what the site wants;
+  it does not touch a single file. The scan, then Build or Clear, brings the
+  disk into line. That is deliberate: on a few hundred images it is a long job
+  and belongs behind a progress bar, not a form submit.
 - Never calls wp_create_image_subsizes(). That regenerates everything from the
-  original and loses manual crops. It rebuilds size by size instead.
-- Sizes the kit did not create are left alone. sbsk_owned_image_sizes records what
-  it made, sbsk_kept_orphans records what it was told to leave. The orphans screen
-  is how you decide what to do with a size from a theme or a plugin that has gone.
+  original and loses manual crops. It builds size by size instead.
+- Sizes the kit did not create are left alone. sbsk_owned_image_sizes records
+  what it made, so a theme size is never cleared as though it were ours.
+- Removing a size deletes the file, the WebP beside it, and the metadata entry,
+  in one pass. The metadata matters as much as the file: an entry pointing at a
+  deleted file makes WordPress hand out a URL for an image that is not there.
+
+#### Rebuilding
+
+- Batches of five over AJAX: sbsk_images_count, then sbsk_images_batch, then a
+  final sbsk_images_report. Each request is told its offset, so nothing depends
+  on order and nothing is redone.
+- A request that comes back empty is retried once, one image at a time, and only
+  a second failure is reported. Each request starts where the last finished, so
+  a failure costs nothing and what is built is kept.
+- All three handlers raise the time limit. Measured on a 672 image library the
+  scan takes well under a second, so slowness was not the cause of the one
+  failure seen in the wild: the rebuild had finished and a later request simply
+  never answered. The raised limits are insurance for a slower host.
+- The progress log gives each image its own row: its own thumbnail, its name,
+  and the sizes built for it underneath. It used to show one thumbnail beside a
+  batch of names, which never matched what you were reading.
+
+#### The orphan scan
+
+- Compares the uploads folder against every place the database records a file:
+  _wp_attached_file, _wp_attachment_metadata, and _wp_attachment_backup_sizes.
+- That last one is easy to forget and was missed at first. Editing an image in
+  WordPress writes a new set of files and keeps the old ones so Restore original
+  image still works, and those are recorded only in the backup meta. Without
+  reading it, every edited image contributed a pile of false orphans, and
+  deleting them would have quietly taken the undo away. If a site ever shows
+  orphans that are plainly in use, look for another meta key like that one.
+- Every known file is recorded along with its WebP twin, since an optimiser
+  writes photo.jpg.webp, keeping the original extension in front. The scan
+  strips the .webp before checking the extension, so those count as images.
+- A leftover thumbnail from an attachment that no longer exists is found, and
+  so is its WebP. Tested by planting three such files and scanning.
+- It walks the uploads root and its year and month folders only. A folder
+  belonging to another plugin is left alone on purpose.
+- Anything referenced anywhere, or marked Keep, is listed but never bulk
+  deleted, and the button counts only what it will actually remove. A list of
+  fourteen with a button offering two is correct, though it reads like a fault.
+  sbsk_kept_orphans holds what you told it to leave.
+- Each row shows a thumbnail and, where the file can be traced, the attachment
+  id as a grey pill linking to the media library. Tracing tries the filename,
+  then the same name with a size suffix stripped, then the backup data.
+
+#### On an attachment
+
+The list of sizes appears in two places, and they are not the same mechanism.
+
+- The full edit screen gets a real metabox, SocialBUMP Site Kit Sizes, through
+  add_meta_boxes_attachment. It can be dragged and collapsed like any other.
+- The media modal cannot have metaboxes at all, so the field built through
+  attachment_fields_to_edit carries its own postbox markup: an empty label, and
+  html holding a div.postbox with a postbox-header and an inside. That is how
+  the Replace Media panel does it, and it is the only way to get a title bar in
+  the modal.
+- The field bows out when the screen base is post, or the edit screen would
+  show the same thing twice.
+- WordPress lays an extra field out as a table row: a label column, and a field
+  cell floated right at 65 per cent to sit beside it. With an empty label that
+  leaves a gap, so the CSS takes the label column to zero and drops the float,
+  the width and the 1px margin from the field. The margin is the part people
+  miss: it is why a full width float overflows, and why other plugins use 99.8
+  per cent instead of removing it.
+- Each size that exists links to that file. A missing one stays plain text,
+  since there would be nothing to open.
+
+#### Uploads
+
+- On add_attachment the file name is tidied and alt text filled in from the
+  title, so an upload called DSC_0042 does not end up as alt text. Alt text
+  written by hand is left alone, and the file on disk is never renamed.
 
 ### Admin Settings
 
@@ -247,13 +338,18 @@ features, and a boot callback that does the work.
 
 ## Images, the one with teeth
 
-The Images module owns the registered image sizes for the site, and can rebuild
-thumbnails in batches with a progress bar. Two rules:
+The Images module owns the registered sizes, rebuilds thumbnails in batches, and
+decides what in the uploads folder is rubbish. It can delete files, so it gets
+its own warning here. The full account is under Every module in detail; these
+are the three rules worth reading before you touch it.
 
+- A size counts as present only when its file is really there. Never ask the
+  metadata on its own. SBSK_Images_Rebuild::present() is the only answer.
 - Never call wp_create_image_subsizes() on a rebuild. It regenerates from the
   original and can lose crops. The rebuild works size by size instead.
-- Sizes the kit did not create are left alone. sbsk_owned_image_sizes records
-  what it made, and sbsk_kept_orphans what it was told to leave.
+- Only touch what we made. sbsk_owned_image_sizes records what the kit created,
+  sbsk_kept_orphans what it was told to leave, and files WordPress keeps so an
+  image edit can be undone are never treated as strays.
 
 ## What it stores
 
@@ -263,9 +359,9 @@ thumbnails in batches with a progress bar. Two rules:
 | sbsk_groups | which groups are on |
 | sbsk_module_settings | each module settings |
 | sbsk_owned_image_sizes | image sizes the kit created |
-| sbsk_kept_orphans | image sizes it was told to leave alone |
-| sbsk_github_token | encrypted, hub only |
-| sbsk_pending_changes | notes for the next release |
+| sbsk_kept_orphans | files in uploads it was told to leave alone, kept as paths relative to the uploads folder |
+| sbsk_github_token | encrypted, hub only, and deleted on any site that is not the hub |
+| sbsk_pending_changes | notes for the next release, hub only, deleted elsewhere |
 
 ## Where to be careful
 
@@ -277,6 +373,15 @@ thumbnails in batches with a progress bar. Two rules:
   events, and counts trailing spaces, because they count in a meta description.
 - The admin colour scheme module registers the SocialBUMP scheme. Other code
   reads the current scheme for its accent, so changing it affects all three.
+- Anything that reports on image sizes must go through present(). Three separate
+  places trusted the metadata instead, and all three quietly lied: the library
+  scan, the per image check, and the attachment panel.
+- A form can hold more than one submit. If you add one that is not a save, mark
+  it data-sb-always-on, or the unsaved changes reminder may submit it instead of
+  the save.
+- When testing a change in the same request that wrote the file, the old class
+  is already loaded and you will see the old behaviour. Check in a fresh
+  request before believing a change did not work. This wasted time twice.
 
 <!-- shared:start -->
 
@@ -408,8 +513,16 @@ Attributes a button can carry:
 - data-sb-label-dirty: the wording to use when there is something to save, for a
   button whose resting label says there is nothing.
 - data-sb-always-on: never disable this one. Used for buttons that do work
-  rather than save, such as Full Rebuild.
+  rather than save, such as Full Rebuild, and for any submit that is an action
+  rather than a save, such as Reset to defaults.
 - data-sb-idle=1: nothing to run right now, so sit inactive until there is.
+
+The reminder saves with the button that actually saves: one marked data-sb-save,
+then the primary button, and only then the first submit in the form. A form can
+hold more than one submit and not all of them save. The image sizes form has
+Reset to defaults sitting above Save changes, and the reminder used to submit
+whichever came first, so clicking it reset the sizes rather than saving them.
+Worth remembering when adding any second submit to a form.
 
 Styling: .sb-save--clean is a grey outline on transparent, .sb-save--dirty is
 pale yellow with an amber border, matching the reminder. Both selectors lead with

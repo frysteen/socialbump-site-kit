@@ -180,8 +180,10 @@
 				} );
 			}
 
+			var retried = false;
+
 			function batch( offset, total, force, mode, sizes ) {
-				$.post( ajaxurl, { action: 'sbsk_images_batch', nonce: nonce, offset: offset, force: force ? 1 : 0, mode: mode, sizes: sizes || [], batch: force ? 1 : 5 } ).done( function ( response ) {
+				$.post( ajaxurl, { action: 'sbsk_images_batch', nonce: nonce, offset: offset, force: force ? 1 : 0, mode: mode, sizes: sizes || [], batch: ( retried || force ) ? 1 : 5 } ).done( function ( response ) {
 					if ( ! response || ! response.success ) {
 						$status.text( 'Something went wrong. Try again.' );
 						buttons( true );
@@ -201,19 +203,26 @@
 					if ( data.items && data.items.length ) {
 						var $log = $( '#sbsk-progress-log' );
 
+						/**
+						 * One image to a row, with its own thumbnail and the sizes built for
+						 * it underneath. A batch does several images at once, so a single
+						 * thumbnail beside a list of names never matched what you were
+						 * reading.
+						 */
 						data.items.forEach( function ( item ) {
 							var sizes = ( item.sizes || [] ).map( function ( name ) {
 								return '<li><span class="sbsk-tick">&#10003;</span>' + name + '</li>';
 							} ).join( '' );
 
-							$log.prepend( '<li><strong>' + item.name + '</strong><ul>' + sizes + '</ul></li>' );
+							var thumb = item.thumb ? '<img class="sbsk-log__thumb" src="' + item.thumb + '" alt="">' : '<span class="sbsk-log__thumb is-empty"></span>';
+
+							$log.prepend( '<li class="sbsk-log__row">' + thumb + '<div class="sbsk-log__detail"><strong>' + item.name + '</strong><ul>' + sizes + '</ul></div></li>' );
 						} );
 
-						$log.find( 'li:gt( 20 )' ).remove();
+						$log.find( 'li.sbsk-log__row:gt( 20 )' ).remove();
 					}
 
-					if ( data.last && data.last.thumb ) {
-						$( '#sbsk-progress-thumb' ).html( '<img src="' + data.last.thumb + '" alt="">' );
+					if ( data.last && data.last.name ) {
 						$status.text( done + ' of ' + total + ' checked. ' + data.last.name );
 					}
 
@@ -232,7 +241,24 @@
 
 					batch( data.offset, total, force, mode, sizes );
 				} ).fail( function () {
-					$status.text( 'The server did not answer. Nothing else was changed.' );
+					/**
+					 * One request failing is usually the host, not the work.
+					 *
+					 * Building several sizes from a large original can run long enough to
+					 * be cut off. Nothing is lost when that happens, because each request
+					 * starts where the last one finished, so the same batch is tried again
+					 * one image at a time. Only a second failure is worth reporting.
+					 */
+					if ( ! retried ) {
+						retried = true;
+
+						$status.text( 'That took too long. Trying again, one at a time.' );
+						batch( offset, total, force, mode, sizes );
+
+						return;
+					}
+
+					$status.text( 'The server did not answer. Anything already built has been kept, so you can start again from here.' );
 					buttons( true );
 				} );
 			}
@@ -391,7 +417,7 @@
 
 					clearOrphans( data.offset, cleared, freed );
 				} ).fail( function () {
-					$status.text( 'The server did not answer. Nothing else was changed.' );
+					$status.text( 'The server did not answer. Nothing else was changed, and what was already removed has gone.' );
 					buttons( true );
 				} );
 			}

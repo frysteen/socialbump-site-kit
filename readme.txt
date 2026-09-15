@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,13 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.0.4 =
+* Image scan no longer lists the files WordPress keeps after you edit an image. They looked abandoned, but deleting them would have removed the ability to restore the original.
+* Orphan list now shows a thumbnail and the attachment it came from.
+* A rebuild that loses a request to the server now picks itself up and carries on, instead of stopping with a warning when the work was fine.
+* Image sizes on an attachment now appear in a proper panel titled SocialBUMP Site Kit Sizes, in the media modal and on the full edit screen, with each size linking to that file.
+* A size counts as present only when its file is really there. A size listed in the metadata with no file behind it was reported as nothing to do, so it never got rebuilt.
+
 = 1.0.3 =
 * Settings link on the plugins screen, which Site Kit was missing.
 * The banner now lists every page in the plugin, so you can move between them without going back to the admin menu. Updates shows a waiting version and Publishing shows how many changes are queued.

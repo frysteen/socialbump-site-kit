@@ -24,6 +24,7 @@ class SBSK_Images_Tools {
 		add_action( 'wp_ajax_sbsk_images_orphan_one', [ __CLASS__, 'ajax_orphan_one' ] );
 		add_action( 'wp_ajax_sbsk_images_keep', [ __CLASS__, 'ajax_keep' ] );
 		add_filter( 'attachment_fields_to_edit', [ __CLASS__, 'attachment_field' ], 20, 2 );
+		add_action( 'add_meta_boxes_attachment', [ __CLASS__, 'meta_box' ] );
 	}
 
 	private static function guard() {
@@ -101,6 +102,12 @@ class SBSK_Images_Tools {
 
 	public static function ajax_batch() {
 		self::guard();
+
+		// Building several sizes from a large original can outlast the default
+		// thirty seconds, and a request that dies looks like the server ignoring us.
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 120 );
+		}
 
 		$offset  = isset( $_POST['offset'] ) ? max( 0, (int) $_POST['offset'] ) : 0;
 		$force   = ! empty( $_POST['force'] );
@@ -219,6 +226,13 @@ class SBSK_Images_Tools {
 	public static function ajax_report() {
 		self::guard();
 
+		// The heaviest request here: every attachment is checked and the uploads
+		// folder is walked. On a large library that outlasts the usual thirty
+		// seconds, and the run looks like it failed when the work was already done.
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 180 );
+		}
+
 		require_once __DIR__ . '/class-sbsk-images-orphans.php';
 
 		$summary = self::summary();
@@ -306,7 +320,18 @@ class SBSK_Images_Tools {
 					$classes[] = 'is-extra';
 				}
 
-				$rows .= '<tr' . ( $classes ? ' class="' . esc_attr( implode( ' ', $classes ) ) . '"' : '' ) . '><td><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener">' . esc_html( $relative ) . '</a>' . $state . '</td>';
+				// A thumbnail and the attachment it came from, so a stray can be placed at a glance.
+				$owner = SBSK_Images_Orphans::attachment_for( $file['path'] );
+				$pill  = '';
+
+				if ( $owner ) {
+					$pill = ' <a class="sbsk-report__id" href="' . esc_url( get_edit_post_link( $owner['id'] ) ) . '" title="' . esc_attr( $owner['title'] !== '' ? $owner['title'] : __( 'Open in the media library', 'sb-site-kit' ) ) . '">#' . (int) $owner['id'] . '</a>';
+				}
+
+				$thumb = '<a class="sbsk-report__thumb" href="' . esc_url( $url ) . '" target="_blank" rel="noopener"><img src="' . esc_url( $url ) . '" alt="" loading="lazy"></a>';
+
+				$rows .= '<tr' . ( $classes ? ' class="' . esc_attr( implode( ' ', $classes ) ) . '"' : '' ) . '><td class="sbsk-report__file">' . $thumb;
+				$rows .= '<span class="sbsk-report__name"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener">' . esc_html( $relative ) . '</a>' . $pill . $state . '</span></td>';
 				$rows .= '<td class="sbsk-report__size">' . esc_html( size_format( $file['bytes'] ) ) . '</td>';
 				$rows .= '<td class="sbsk-report__action">';
 				$rows .= '<button type="button" class="button sbsk-report__keep" data-file="' . esc_attr( $relative ) . '" data-keep="' . ( $kept ? '0' : '1' ) . '">' . esc_html( $kept ? __( 'Stop keeping', 'sb-site-kit' ) : __( 'Keep', 'sb-site-kit' ) ) . '</button>';
@@ -354,6 +379,10 @@ class SBSK_Images_Tools {
 		self::guard();
 
 		require_once __DIR__ . '/class-sbsk-images-orphans.php';
+
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 120 );
+		}
 
 		$offset = isset( $_POST['offset'] ) ? max( 0, (int) $_POST['offset'] ) : 0;
 		$found  = SBSK_Images_Orphans::find();
@@ -407,9 +436,13 @@ class SBSK_Images_Tools {
 		$missing = SBSK_Images_Rebuild::missing_all( $id, $meta );
 		$rows    = '';
 
+		// Listed is not the same as there. A size whose file has gone still has its
+		// metadata entry, and saying the dimensions here would be a lie.
+		$present = SBSK_Images_Rebuild::present( $id, $meta );
+
 		foreach ( array_keys( SBSK_Images_Rebuild::all_wanted() ) as $name ) {
 
-			if ( isset( $have[ $name ] ) ) {
+			if ( isset( $have[ $name ] ) && in_array( $name, $present, true ) ) {
 				$state = (int) $have[ $name ]['width'] . ' x ' . (int) $have[ $name ]['height'];
 				$class = 'is-present';
 			} elseif ( in_array( $name, $missing, true ) ) {
@@ -420,29 +453,82 @@ class SBSK_Images_Tools {
 				$class = 'is-skipped';
 			}
 
-			$rows .= '<li class="' . esc_attr( $class ) . '"><span>' . esc_html( $name ) . '</span><span>' . esc_html( $state ) . '</span></li>';
+			// The name opens that size, when there is a file behind it to open.
+			$label = esc_html( $name );
+
+			if ( $class === 'is-present' ) {
+				$src = wp_get_attachment_image_src( $id, $name );
+
+				if ( ! empty( $src[0] ) ) {
+					$label = '<a href="' . esc_url( $src[0] ) . '" target="_blank" rel="noopener">' . esc_html( $name ) . '</a>';
+				}
+			}
+
+			$rows .= '<li class="' . esc_attr( $class ) . '"><span>' . $label . '</span><span>' . esc_html( $state ) . '</span></li>';
 		}
 
 		return '<ul class="sbsk-sizes">' . $rows . '</ul>';
 	}
 
+
+	/**
+	 * The same list as a panel on the full attachment edit screen.
+	 *
+	 * The media modal gets it through attachment_fields_to_edit, which has no room
+	 * for a heading. Opening the attachment properly gives it a box of its own with
+	 * a title bar, which is easier to find and reads better.
+	 */
+	public static function meta_box( $post ) {
+		if ( ! wp_attachment_is_image( $post->ID ) || ! current_user_can( 'upload_files' ) ) {
+			return;
+		}
+
+		add_meta_box(
+			'sbsk-image-sizes',
+			__( 'SocialBUMP Site Kit Sizes', 'sb-site-kit' ),
+			[ __CLASS__, 'render_meta_box' ],
+			'attachment',
+			'side',
+			'default'
+		);
+	}
+
+	public static function render_meta_box( $post ) {
+		echo '<div class="sbsk-attachment-sizes" data-id="' . esc_attr( $post->ID ) . '" data-nonce="' . esc_attr( wp_create_nonce( 'sbsk_images' ) ) . '">';
+		echo self::sizes_list( $post->ID ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo '<button type="button" class="button sbsk-regenerate">' . esc_html__( 'Regenerate sizes', 'sb-site-kit' ) . '</button>';
+		echo '</div>';
+	}
 	/** A panel in Attachment details listing the sizes, with a rebuild button. */
 	public static function attachment_field( $fields, $post ) {
 		if ( ! wp_attachment_is_image( $post->ID ) || ! current_user_can( 'upload_files' ) ) {
 			return $fields;
 		}
 
-		$html  = '<div class="sbsk-attachment-sizes" data-id="' . esc_attr( $post->ID ) . '" data-nonce="' . esc_attr( wp_create_nonce( 'sbsk_images' ) ) . '">';
+		// The full edit screen has the panel with a title bar, so the field there
+		// would only say the same thing twice.
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+
+		if ( $screen && $screen->base === 'post' ) {
+			return $fields;
+		}
+
+		// The media modal has no room for a real panel, so the same markup
+		// WordPress uses for one is built here: a box with a title bar, and no
+		// field label beside it.
+		$html  = '<div class="postbox sbsk-attachment-box">';
+		$html .= '<div class="postbox-header"><h2 class="hndle">' . esc_html__( 'SocialBUMP Site Kit Sizes', 'sb-site-kit' ) . '</h2></div>';
+		$html .= '<div class="inside">';
+		$html .= '<div class="sbsk-attachment-sizes" data-id="' . esc_attr( $post->ID ) . '" data-nonce="' . esc_attr( wp_create_nonce( 'sbsk_images' ) ) . '">';
 		$html .= self::sizes_list( $post->ID );
 		$html .= '<button type="button" class="button sbsk-regenerate">' . esc_html__( 'Regenerate sizes', 'sb-site-kit' ) . '</button>';
-		$html .= '</div>';
+		$html .= '</div></div></div>';
 
 		$fields['sbsk_sizes'] = [
-			'label' => __( 'Site Kit sizes', 'sb-site-kit' ),
+			'label' => '',
 			'input' => 'html',
 			'html'  => $html,
 		];
-
 		return $fields;
 	}
 }

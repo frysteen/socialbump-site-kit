@@ -49,6 +49,32 @@ class SBSK_Images_Rebuild {
 	 * A size is only expected when the original is wider than it, because
 	 * WordPress will not upscale an image to fill a larger size.
 	 */
+	/**
+	 * The sizes this attachment genuinely has.
+	 *
+	 * Metadata is not proof. A size can be listed and its file long gone: deleted
+	 * by hand, lost in a migration, or cleared when the size was switched off and
+	 * left behind in the metadata when it was switched back on. Trusting the list
+	 * alone made the scan report nothing to build while the file was plainly
+	 * absent, so every entry is checked against the disk.
+	 */
+	public static function present( $id, array $meta ) {
+		$file = get_attached_file( $id );
+		$base = $file ? trailingslashit( dirname( $file ) ) : '';
+		$have = [];
+
+		foreach ( (array) ( $meta['sizes'] ?? [] ) as $name => $size ) {
+			if ( empty( $size['file'] ) ) {
+				continue;
+			}
+
+			if ( $base === '' || file_exists( $base . $size['file'] ) ) {
+				$have[] = $name;
+			}
+		}
+
+		return $have;
+	}
 	public static function missing( $id, array $meta = null ) {
 		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 
@@ -56,7 +82,7 @@ class SBSK_Images_Rebuild {
 			return [];
 		}
 
-		$have    = array_keys( (array) ( $meta['sizes'] ?? [] ) );
+		$have    = self::present( $id, $meta );
 		$missing = [];
 
 		foreach ( SBSK_Images::widths() as $width ) {
@@ -386,7 +412,7 @@ class SBSK_Images_Rebuild {
 			return [];
 		}
 
-		$have    = array_keys( (array) ( $meta['sizes'] ?? [] ) );
+		$have    = self::present( $id, $meta );
 		$missing = [];
 
 		foreach ( self::all_wanted() as $name => $size ) {
