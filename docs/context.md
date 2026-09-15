@@ -497,6 +497,14 @@ menus never register and the plugin appears to have vanished until you navigate
 somewhere else. Each plugin now clears the compiled copies of its own files on
 upgrader_process_complete, which settles it.
 
+The Update now button on each Updates page goes through update-core.php, the
+bulk path the dashboard uses: maintenance mode on, files swapped, maintenance
+mode off, plugin never deactivated. It used to go through update.php, the
+single plugin path, which deactivates the plugin first and reactivates it
+silently in the same request. When that silent step failed the plugin was left
+switched off with nothing in any log, which is exactly what happened on a
+client site. Keep the bulk path.
+
 ### What a client site must not carry
 
 The hub is the blueprint new sites are built from, so whatever is in its database
@@ -699,5 +707,11 @@ folder, and anything not carried back to the hub is gone.
   to the right of the whole menu.
 - The admin menu can be renamed by an admin menu plugin. Admin and Site
   Enhancements holds its own titles and wins over whatever the plugin registers.
+- opcache_invalidate() only reaches the PHP process it runs in. On a LiteSpeed
+  host with opcache.revalidate_freq set to 60, every other process keeps running
+  the old file for up to a minute after a write. A rebuild started in that
+  window ran half on old code and half on new, and stamped the cache both ways.
+  A fresh request is not proof until a minute has passed, and nothing that
+  writes stamps or data formats should be exercised in that minute.
 
 <!-- shared:end -->
