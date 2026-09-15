@@ -468,6 +468,11 @@ admin bar: first to load defines the class, the others register with it.
   as the heading inside the panel, so all of them go out from one screen.
 - The item in the admin bar opens this page when it exists, and the first
   plugin otherwise.
+- Between the cards and the publishing panels sits a master prompt for starting a
+  chat that could touch more than one plugin. It builds itself from whatever is
+  registered, so a fourth plugin would appear in it without being told, and it
+  covers what the per plugin prompts cannot: that shared code lands everywhere,
+  and that the shared block of the notes must stay identical in every copy.
 
 register() takes id, name, version, file and pages, and optionally notes, css,
 css_time, logo, accent_var, hub, and release, a callback that draws that plugin
@@ -571,6 +576,10 @@ code and shows a Publishing page.
 - The notes box fills from prefix_log_change() calls made since the last release,
   and the list empties once a release goes out. Call it after any change worth
   telling someone about, in their words rather than yours.
+- Only log what a client site would notice. The Hub page, the Publishing page and
+  anything else that exists only on the hub never reach a client site, so a change
+  to them earns no note and no release of its own. It rides along with the next
+  real one. A release exists to tell other sites something changed for them.
 - Publishing retries on a 5xx, checks the zip actually attached, and checks again
   before undoing anything, because GitHub has published a release and then failed
   the response.

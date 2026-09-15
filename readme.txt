@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,15 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.0.5 =
+* A size now counts as built only when its file is really on disk. A size listed in the database with no file behind it was reported as nothing to do, so it never got rebuilt and the gap went unnoticed.
+* The image scan no longer lists the files WordPress keeps after you edit an image. They looked abandoned, but deleting them would have removed the ability to restore the original.
+* Image sizes on an attachment now appear in a panel titled SocialBUMP Site Kit Sizes, in the media library and on the full edit screen, with each size linking to that file.
+* The orphan list now shows a thumbnail and the attachment each file came from.
+* A rebuild that loses a request to the server now picks itself up and carries on, instead of stopping with a warning when the work was fine.
+* The rebuild progress now gives each image its own row and its own thumbnail, rather than one picture beside a batch of names.
+* The unsaved changes reminder now saves with the save button. On the image sizes page it could submit Reset to defaults instead, because that button comes first in the form.
+
 = 1.0.4 =
 * Image scan no longer lists the files WordPress keeps after you edit an image. They looked abandoned, but deleting them would have removed the ability to restore the original.
 * Orphan list now shows a thumbnail and the attachment it came from.
