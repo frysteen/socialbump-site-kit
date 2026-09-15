@@ -232,7 +232,6 @@
 						// A forced run is a deliberate act, so it does not stay armed.
 						if ( force ) {
 							$( '#sbsk-rebuild-force' ).prop( 'checked', false );
-							$( '#sbsk-sizepicker' ).prop( 'hidden', true );
 						}
 
 						scan( true );
@@ -289,40 +288,44 @@
 			function refreshBuild() {
 				var force = $( '#sbsk-rebuild-force' ).prop( 'checked' );
 
-				if ( force ) {
-					$build.prop( 'disabled', chosenSizes().length < 1 );
-					return;
-				}
-
-				$build.prop( 'disabled', lastMissing < 1 );
+				// A forced run remakes the saved sizes; a plain build needs something missing.
+				$build.prop( 'disabled', force ? savedCount < 1 : lastMissing < 1 );
 			}
 
-			$( '#sbsk-rebuild-force' ).on( 'change', function () {
-				$( '#sbsk-sizepicker' ).prop( 'hidden', ! this.checked );
-				refreshBuild();
+			$( '#sbsk-rebuild-force' ).on( 'change', refreshBuild );
+
+			/**
+			 * The size list on the left is a plain form, so save-state.js handles the
+			 * button, the reminder and the warning on leaving. These only tick the
+			 * boxes, and fire change so it notices.
+			 */
+			var $sizes     = $( '#sbsk-cleaner-sizes' );
+			var savedCount = $sizes.find( '.sbsk-size-choice:checked' ).length;
+
+			/**
+			 * A real DOM event, not jQuery's: save-state.js listens with
+			 * addEventListener, and a jQuery trigger never reaches it, so the save
+			 * button sat disabled while the ticks plainly changed.
+			 */
+			function ticked( $boxes, on ) {
+				$boxes.prop( 'checked', on );
+
+				if ( $boxes.length ) {
+					$boxes[0].dispatchEvent( new Event( 'change', { bubbles: true } ) );
+				}
+			}
+
+			$sizes.on( 'click', '[data-sizes-all], [data-sizes-none]', function () {
+				ticked( $( this ).closest( '.sbsk-sizegroup' ).find( '.sbsk-size-choice' ), this.hasAttribute( 'data-sizes-all' ) );
 			} );
 
-			$panel.add( $rebuild ).on( 'change', '.sbsk-size-choice', refreshBuild );
-
 			$( '#sbsk-sizes-all' ).on( 'click', function () {
-				$( '.sbsk-size-choice' ).prop( 'checked', true );
-				refreshBuild();
+				ticked( $sizes.find( '.sbsk-size-choice' ), true );
 			} );
 
 			$( '#sbsk-sizes-none' ).on( 'click', function () {
-				$( '.sbsk-size-choice' ).prop( 'checked', false );
-				refreshBuild();
+				ticked( $sizes.find( '.sbsk-size-choice' ), false );
 			} );
-
-			function chosenSizes() {
-				var names = [];
-
-				$( '.sbsk-size-choice:checked' ).each( function () {
-					names.push( this.value );
-				} );
-
-				return names;
-			}
 
 			$panel.on( 'click', '#sbsk-show-all', function () {
 				$panel.find( 'tr.is-extra' ).removeClass( 'is-extra' );
@@ -372,13 +375,11 @@
 			$build.on( 'click', function () {
 				var force = $( '#sbsk-rebuild-force' ).prop( 'checked' );
 
-				if ( force && ! window.confirm( 'Rebuild ' + chosenSizes().length + ' size' + ( chosenSizes().length === 1 ? '' : 's' ) + ' on every image? This replaces files that already exist.' ) ) {
+				if ( force && ! window.confirm( 'Rebuild the ' + savedCount + ' saved size' + ( savedCount === 1 ? '' : 's' ) + ' on every image? This replaces files that already exist.' ) ) {
 					return;
 				}
 
-				var sizes = force ? chosenSizes() : [];
-
-				start( 'build', force, sizes );
+				start( 'build', force, [] );
 			} );
 
 			$clean.on( 'click', function () {
@@ -402,7 +403,7 @@
 					cleared += data.removed;
 					freed += data.bytes;
 
-					var seen = Math.min( cleared + data.offset, data.total );
+					var seen = Math.min( data.offset, data.total );
 					var pct  = data.total ? Math.round( ( seen / data.total ) * 100 ) : 100;
 
 					$bar.css( 'width', pct + '%' );
@@ -436,6 +437,36 @@
 
 				clearOrphans( 0, 0, 0 );
 			} );
+		}
+
+		/**
+		 * Attachment details: the sizes list is fetched when its pane is on screen.
+		 * The media modal builds panes as you click through, so the page is
+		 * watched for new ones and each is filled once, the first time it shows.
+		 */
+		function fillPanels() {
+			$( '.sbsk-attachment-sizes[data-lazy]:visible' ).each( function () {
+				var $panel = $( this );
+
+				$panel.removeAttr( 'data-lazy' );
+
+				$.post( ajaxurl, { action: 'sbsk_images_panel', nonce: $panel.data( 'nonce' ), id: $panel.data( 'id' ) } ).done( function ( response ) {
+					if ( response && response.success ) {
+						$panel.find( '.sbsk-sizes' ).replaceWith( response.data.html );
+					}
+				} );
+			} );
+		}
+
+		if ( $( '.sbsk-attachment-sizes' ).length || $( 'body' ).hasClass( 'upload-php' ) || $( 'body' ).hasClass( 'post-php' ) || $( 'body' ).hasClass( 'post-new-php' ) ) {
+			var panelTimer = null;
+			var watcher    = new MutationObserver( function () {
+				window.clearTimeout( panelTimer );
+				panelTimer = window.setTimeout( fillPanels, 150 );
+			} );
+
+			watcher.observe( document.body, { childList: true, subtree: true } );
+			fillPanels();
 		}
 
 		// Attachment details: rebuild one image.

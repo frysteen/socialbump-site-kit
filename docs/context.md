@@ -173,6 +173,63 @@ reported nothing to build. 638 images sat with no 480 and nothing said a word.
 The same gap was showing in the details panel, which printed dimensions for a
 file that was not there. Three places, one wrong assumption.
 
+#### Which sizes the cleaner works on
+
+The Image Cleaner page carries the list: every registered size, grouped as Image
+Sizes (ours), WordPress, WooCommerce and Other Image Sizes, with all and none per
+group and Select all and none at the bottom. Whatever is ticked is what the scan
+counts, what Build fills in, what a forced rebuild remakes, and what Remove old
+sizes clears. It replaced the picker that only appeared when forcing.
+
+The choice is per user, in the sbsk_cleaner_sizes user meta, and everything is
+ticked until a choice is saved. A name that is no longer registered is dropped on
+the way out of chosen(), so removing a width cannot leave a stale tick behind.
+
+It is a plain form posting to admin-post, not AJAX, so save-state.js does the
+rest: the button stays quiet until a tick changes, the reminder follows you down
+the page, and leaving with changes pending warns first. Reloading without saving
+throws the ticks away, which is the point. The all and none links are marked
+data-sb-always-on so the reminder never mistakes one for the save button, and
+they dispatch a real DOM change event: save-state listens with addEventListener,
+and a jQuery trigger never reaches it, which left the button disabled while the
+ticks plainly changed.
+
+The engine takes it as an $only argument on stale(), missing_all(), build(),
+clean() and stale_files(). Null means every size, which is what the attachment
+panel and a single image rebuild still pass.
+
+#### How the engine and the tools keep their cost down
+
+- make_sizes() decodes an image once and makes every wanted size from it with
+  multi_resize(), which on both GD and Imagick works from the original pixels
+  for each size. build() and rebuild() used to call wp_get_image_editor() per
+  size: thirteen decodes of one photo for one rebuild. multi_resize() names
+  files after the file it loaded, and the attached file can be the -scaled one
+  while the thumbnails carry the original name, so each made file is moved to
+  the base_name() the set uses, replacing what was there.
+- clean() drops the metadata entry for a stale size, but the file only goes if
+  file_has_other_owner() says nothing else uses it: another size of the same
+  attachment with the same dimensions (medium at 480 and image-480 share one
+  file), the original itself, or any other attachment whose metadata names
+  the file. That last check is one LIKE on postmeta per stale file.
+- A run holds its id list in a transient for ten minutes (sbsk_images_run_ per
+  user; sbsk_orphans_run_ for the orphan list) instead of every batch fetching
+  the whole library again. Scan starts a run fresh; the last batch clears it.
+  The orphan run steps a whole batch on each time because the list is fixed;
+  remove() checks every file again before touching it, so a list gone a
+  little stale costs nothing.
+- summary() is one pass over the library and gathers the per size totals the
+  report needs on that pass; the report used to walk it all again. The orphan
+  reference lookups, three unindexed queries per file, run once per file and
+  the rows reuse the answer.
+- The media modal panel is a placeholder until its pane is on screen, then
+  sbsk_images_panel fetches the list. attachment_fields_to_edit runs for every
+  attachment the library sends to the browser, forty a page, and the list is a
+  file check per size, so building it there cost hundreds of stats a page for
+  panes nobody opened. admin.js watches the page for new panes with a
+  MutationObserver and fills each once. The full edit screen still builds its
+  meta box in place, one image, no cost worth saving.
+
 #### Sizes
 
 - Registered on after_setup_theme, and added to the editor size chooser through
@@ -389,6 +446,8 @@ are the three rules worth reading before you touch it.
 | sbsk_owned_image_sizes | image sizes the kit created |
 | sbsk_kept_orphans | files in uploads it was told to leave alone, kept as paths relative to the uploads folder |
 | sbsk_image_split | that the Image Cleaner split migration has run, and which scheme |
+| sbsk_cleaner_sizes (user meta) | the sizes each user has ticked on the Image Cleaner page |
+| sbsk_images_run_<user>, sbsk_orphans_run_<user> (transients) | the id or path list held for a run, ten minutes |
 | socialbump_cards (user meta) | each user's card order and collapsed cards, per page key |
 | sbsk_github_token | encrypted, hub only, and deleted on any site that is not the hub |
 | sbsk_pending_changes | notes for the next release, hub only, deleted elsewhere |
@@ -418,6 +477,11 @@ are the three rules worth reading before you touch it.
   dependency on Images written that way before it became its own group.
 - render_other_sizes() reads a note key that editable_sizes() does not set;
   it is read with empty() now. Reading it blind warned on every size row.
+- Remove old sizes still only ever deletes sizes the kit registered itself.
+  Ticking a WordPress or a third party size on the cleaner page lets it be
+  built, never cleared. Do not widen that.
+- Anything that changes a form field from script has to dispatch a real DOM
+  event for save-state.js to see it. jQuery trigger does not.
 
 <!-- shared:start -->
 

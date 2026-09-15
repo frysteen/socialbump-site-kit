@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.7
+Stable tag: 1.0.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,15 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.0.8 =
+* The Image Cleaner page now lists every image size, grouped into your sizes, WordPress, WooCommerce and anything else, with a tick per size. The scan, Build Thumbnails, a forced rebuild and Remove old sizes all work on just the sizes you tick. Your choice is saved against your login, so it does not change what anyone else sees.
+* The Sizes list has an Edit Sizes link across to the Images page.
+* Tidied the Images page: the size name fills the row with any clash warning underneath it, rows are separated, and the remove cross is clearer.
+* Rebuilding thumbnails is much faster: each image is opened once and every size made from it, instead of being opened again for each size.
+* Scans and orphan clean-ups no longer re-read the whole library between batches, and the scan counts everything in one pass.
+* Remove old sizes now checks that nothing else uses a file before deleting it, so two sizes that share a file, or two library entries that point at the same file, are safe.
+* In the media library, the sizes panel for an image loads when you open it rather than being built for every image on the page.
+
 = 1.0.7 =
 * Images is now two modules. Image Settings keeps the sizes and the upload tidying. Image Cleaner, its own module and off on new sites, holds the scan, the thumbnail rebuild, the old size clean up, the orphan scan and the sizes panel in the media library. With the cleaner off, the media library and the editor no longer load any of it.
 * Your existing rebuild switch is carried across as the Image Cleaner switch, so nothing changes on a site until you turn it off.

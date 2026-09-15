@@ -103,14 +103,53 @@ class SBSK_Images_Rebuild {
 	}
 
 	/** Sizes on this attachment that we own but no longer want. */
-	public static function stale( $id, array $meta = null ) {
-		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
-		$have = array_keys( (array) ( $meta['sizes'] ?? [] ) );
+	/**
+	 * $only, here and below, narrows the work to those size names: the Image
+	 * Cleaner page lets you tick which sizes to build or clear. Null means all.
+	 */
+	public static function stale( $id, array $meta = null, array $only = null ) {
+		$meta  = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
+		$have  = array_keys( (array) ( $meta['sizes'] ?? [] ) );
+		$stale = array_values( array_intersect( array_diff( $have, self::wanted() ), self::owned() ) );
 
-		return array_values( array_intersect( array_diff( $have, self::wanted() ), self::owned() ) );
+		return $only === null ? $stale : array_values( array_intersect( $stale, $only ) );
 	}
 
 	/** Remove a generated file and any WebP written beside it. */
+	/**
+	 * Whether a size file is still used by another size of this attachment, or
+	 * by any other attachment.
+	 *
+	 * Two sizes with the same dimensions share one file (medium at 480 and
+	 * image-480, say), and a duplicate upload or a migration can leave two
+	 * attachments pointing at the same file. Deleting it for one would break the
+	 * other, so the file is left and only the metadata entry goes.
+	 */
+	public static function file_has_other_owner( $id, array $meta, $file ) {
+		foreach ( (array) ( $meta['sizes'] ?? [] ) as $size ) {
+			if ( ! empty( $size['file'] ) && $size['file'] === $file ) {
+				return true;
+			}
+		}
+
+		if ( ! empty( $meta['file'] ) && basename( $meta['file'] ) === $file ) {
+			return true;
+		}
+
+		global $wpdb;
+
+		$like  = '%' . $wpdb->esc_like( '"' . $file . '"' ) . '%';
+		$other = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attachment_metadata' AND post_id <> %d AND meta_value LIKE %s LIMIT 1",
+				(int) $id,
+				$like
+			)
+		);
+
+		return (bool) $other;
+	}
+
 	public static function delete_file( $path ) {
 		$removed = 0;
 
@@ -193,7 +232,71 @@ class SBSK_Images_Rebuild {
 	 * rebuild everything, so existing thumbnails keep their names and are not
 	 * written over.
 	 */
-	public static function build( $id, $all = false ) {
+	/**
+	 * Make a set of sizes from one image, decoding it once.
+	 *
+	 * Every size used to get its own wp_get_image_editor() call, which loads and
+	 * decodes the original each time: thirteen decodes of a 5 MB photo for one
+	 * rebuild. multi_resize() works from the one decoded copy, and on both GD and
+	 * Imagick makes each size from the original pixels, not from the last size.
+	 *
+	 * It names files after the file it loaded, and the attached file can be the
+	 * -scaled one while the thumbnails are named from the original, so each made
+	 * file is moved to the base name the rest of the set uses, replacing what
+	 * was there. Returns name => metadata entry for the sizes that were made.
+	 */
+	private static function make_sizes( $id, $file, array $meta, array $specs ) {
+		$made = [];
+
+		if ( ! $specs ) {
+			return $made;
+		}
+
+		$editor = wp_get_image_editor( $file );
+
+		if ( is_wp_error( $editor ) ) {
+			return $made;
+		}
+
+		$results = $editor->multi_resize( $specs );
+
+		if ( ! is_array( $results ) ) {
+			return $made;
+		}
+
+		$folder = trailingslashit( dirname( $file ) );
+		$base   = self::base_name( $id, $meta );
+
+		foreach ( $results as $name => $entry ) {
+			if ( is_wp_error( $entry ) || empty( $entry['file'] ) ) {
+				continue;
+			}
+
+			$extension = pathinfo( $entry['file'], PATHINFO_EXTENSION );
+			$wanted    = $base . '-' . (int) $entry['width'] . 'x' . (int) $entry['height'] . '.' . $extension;
+
+			if ( $entry['file'] !== $wanted ) {
+				if ( file_exists( $folder . $wanted ) ) {
+					wp_delete_file( $folder . $wanted );
+				}
+
+				if ( @rename( $folder . $entry['file'], $folder . $wanted ) ) {
+					$entry['file'] = $wanted;
+				}
+			}
+
+			$made[ $name ] = [
+				'file'      => $entry['file'],
+				'width'     => (int) $entry['width'],
+				'height'    => (int) $entry['height'],
+				'mime-type' => $entry['mime-type'],
+			];
+		}
+
+		return $made;
+	}
+
+	public static function build( $id, $all = false, array $only = null ) {
 		$built = [];
 
 		if ( ! wp_attachment_is_image( $id ) ) {
@@ -207,51 +310,34 @@ class SBSK_Images_Rebuild {
 		}
 
 		$meta    = (array) wp_get_attachment_metadata( $id );
-		$wanted  = $all ? self::missing_all( $id, $meta ) : self::missing( $id, $meta );
+		$wanted  = $all ? self::missing_all( $id, $meta, $only ) : self::missing( $id, $meta );
 		$sizes   = self::all_wanted();
+
+		if ( $only !== null ) {
+			$wanted = array_values( array_intersect( $wanted, $only ) );
+		}
 
 		if ( ! $wanted ) {
 			return $built;
 		}
 
-		$folder    = trailingslashit( dirname( $file ) );
-		$base      = self::base_name( $id, $meta );
-		$extension = pathinfo( $file, PATHINFO_EXTENSION );
+		$specs = [];
 
 		foreach ( $wanted as $name ) {
 			$spec   = isset( $sizes[ $name ] ) ? $sizes[ $name ] : null;
 			$width  = $spec ? (int) $spec['width'] : (int) str_replace( 'image-', '', $name );
 			$height = $spec ? (int) $spec['height'] : 9999;
-			$crop   = $spec ? (bool) $spec['crop'] : false;
 
 			if ( $width < 1 && $height < 1 ) {
 				continue;
 			}
 
-			$editor = wp_get_image_editor( $file );
+			$specs[ $name ] = [ 'width' => $width, 'height' => $height, 'crop' => $spec ? (bool) $spec['crop'] : false ];
+		}
 
-			if ( is_wp_error( $editor ) ) {
-				continue;
-			}
-
-			$editor->resize( $width ? $width : null, $height ? $height : null, $crop );
-
-			$size   = $editor->get_size();
-			$target = $folder . $base . '-' . (int) $size['width'] . 'x' . (int) $size['height'] . '.' . $extension;
-			$saved  = $editor->save( $target );
-
-			if ( is_wp_error( $saved ) || empty( $saved['file'] ) ) {
-				continue;
-			}
-
-			$meta['sizes'][ $name ] = [
-				'file'      => $saved['file'],
-				'width'     => (int) $saved['width'],
-				'height'    => (int) $saved['height'],
-				'mime-type' => $saved['mime-type'],
-			];
-
-			$built[] = $name;
+		foreach ( self::make_sizes( $id, $file, $meta, $specs ) as $name => $entry ) {
+			$meta['sizes'][ $name ] = $entry;
+			$built[]                = $name;
 		}
 
 		if ( $built ) {
@@ -261,7 +347,7 @@ class SBSK_Images_Rebuild {
 		return $built;
 	}
 	/** Remove sizes we own that are no longer wanted. Nothing is built. */
-	public static function clean( $id ) {
+	public static function clean( $id, array $only = null ) {
 		$result = [ 'removed' => [], 'files' => 0 ];
 
 		if ( ! wp_attachment_is_image( $id ) ) {
@@ -277,13 +363,16 @@ class SBSK_Images_Rebuild {
 
 		$folder = dirname( $file );
 
-		foreach ( self::stale( $id, $meta ) as $name ) {
-			if ( ! empty( $meta['sizes'][ $name ]['file'] ) ) {
-				$result['files'] += self::delete_file( $folder . '/' . $meta['sizes'][ $name ]['file'] );
-			}
+		foreach ( self::stale( $id, $meta, $only ) as $name ) {
+			$stale_file = ! empty( $meta['sizes'][ $name ]['file'] ) ? $meta['sizes'][ $name ]['file'] : '';
 
+			// The entry goes either way; the file only goes if nothing else uses it.
 			unset( $meta['sizes'][ $name ] );
 			$result['removed'][] = $name;
+
+			if ( $stale_file && ! self::file_has_other_owner( $id, $meta, $stale_file ) ) {
+				$result['files'] += self::delete_file( $folder . '/' . $stale_file );
+			}
 		}
 
 		if ( $result['removed'] ) {
@@ -296,7 +385,7 @@ class SBSK_Images_Rebuild {
 	 * The files that clearing would actually delete for one attachment:
 	 * each old thumbnail, plus any WebP copy sitting beside it.
 	 */
-	public static function stale_files( $id, array $meta = null ) {
+	public static function stale_files( $id, array $meta = null, array $only = null ) {
 		$meta  = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 		$file  = get_attached_file( $id );
 		$count = 0;
@@ -307,7 +396,7 @@ class SBSK_Images_Rebuild {
 
 		$folder = dirname( $file );
 
-		foreach ( self::stale( $id, $meta ) as $name ) {
+		foreach ( self::stale( $id, $meta, $only ) as $name ) {
 			if ( empty( $meta['sizes'][ $name ]['file'] ) ) {
 				continue;
 			}
@@ -405,7 +494,7 @@ class SBSK_Images_Rebuild {
 	 * A size is only expected when the original is big enough for it, since
 	 * WordPress will not stretch an image to fill a larger size.
 	 */
-	public static function missing_all( $id, array $meta = null ) {
+	public static function missing_all( $id, array $meta = null, array $only = null ) {
 		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 
 		if ( empty( $meta['width'] ) ) {
@@ -416,7 +505,7 @@ class SBSK_Images_Rebuild {
 		$missing = [];
 
 		foreach ( self::all_wanted() as $name => $size ) {
-			if ( in_array( $name, $have, true ) ) {
+			if ( in_array( $name, $have, true ) || ( $only !== null && ! in_array( $name, $only, true ) ) ) {
 				continue;
 			}
 
@@ -452,9 +541,7 @@ class SBSK_Images_Rebuild {
 
 		$meta      = (array) wp_get_attachment_metadata( $id );
 		$sizes     = self::all_wanted();
-		$folder    = trailingslashit( dirname( $file ) );
-		$base      = self::base_name( $id, $meta );
-		$extension = pathinfo( $file, PATHINFO_EXTENSION );
+		$specs = [];
 
 		foreach ( $names as $name ) {
 			if ( empty( $sizes[ $name ] ) ) {
@@ -468,30 +555,12 @@ class SBSK_Images_Rebuild {
 				continue;
 			}
 
-			$editor = wp_get_image_editor( $file );
+			$specs[ $name ] = [ 'width' => (int) $spec['width'], 'height' => (int) $spec['height'], 'crop' => (bool) $spec['crop'] ];
+		}
 
-			if ( is_wp_error( $editor ) ) {
-				continue;
-			}
-
-			$editor->resize( $spec['width'] ? $spec['width'] : null, $spec['height'] ? $spec['height'] : null, $spec['crop'] );
-
-			$size = $editor->get_size();
-			$target = $folder . $base . '-' . (int) $size['width'] . 'x' . (int) $size['height'] . '.' . $extension;
-			$saved  = $editor->save( $target );
-
-			if ( is_wp_error( $saved ) || empty( $saved['file'] ) ) {
-				continue;
-			}
-
-			$meta['sizes'][ $name ] = [
-				'file'      => $saved['file'],
-				'width'     => (int) $saved['width'],
-				'height'    => (int) $saved['height'],
-				'mime-type' => $saved['mime-type'],
-			];
-
-			$done[] = $name;
+		foreach ( self::make_sizes( $id, $file, $meta, $specs ) as $name => $entry ) {
+			$meta['sizes'][ $name ] = $entry;
+			$done[]                 = $name;
 		}
 
 		if ( $done ) {

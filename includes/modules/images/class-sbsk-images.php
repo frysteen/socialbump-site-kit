@@ -431,8 +431,9 @@ class SBSK_Images {
 			esc_html( sprintf( __( 'same width as %s', 'sb-site-kit' ), $clash ) )
 		);
 
+		// The note sits inside the grey box under the name, so it never squeezes the row.
 		return sprintf(
-			'<div class="sbsk-width"><input type="number" name="sbsk_widths[]" value="%1$s" min="16" max="5000" step="1" class="small-text"><code class="sbsk-width__name">image-<span class="sbsk-width__value">%1$s</span></code>%3$s<button type="button" class="button-link sbsk-width__remove" aria-label="%2$s">x</button></div>',
+			'<div class="sbsk-width"><input type="number" name="sbsk_widths[]" value="%1$s" min="16" max="5000" step="1" class="small-text"><code class="sbsk-width__name">image-<span class="sbsk-width__value">%1$s</span>%3$s</code><button type="button" class="button-link sbsk-width__remove" aria-label="%2$s">&#10005;</button></div>',
 			esc_attr( $width ),
 			esc_attr__( 'Remove', 'sb-site-kit' ),
 			$note

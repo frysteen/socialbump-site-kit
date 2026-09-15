@@ -19,6 +19,7 @@ class SBSK_Images_Tools {
 		add_action( 'wp_ajax_sbsk_images_count', [ __CLASS__, 'ajax_count' ] );
 		add_action( 'wp_ajax_sbsk_images_batch', [ __CLASS__, 'ajax_batch' ] );
 		add_action( 'wp_ajax_sbsk_images_single', [ __CLASS__, 'ajax_single' ] );
+		add_action( 'wp_ajax_sbsk_images_panel', [ __CLASS__, 'ajax_panel' ] );
 		add_action( 'wp_ajax_sbsk_images_report', [ __CLASS__, 'ajax_report' ] );
 		add_action( 'wp_ajax_sbsk_images_orphans', [ __CLASS__, 'ajax_orphans' ] );
 		add_action( 'wp_ajax_sbsk_images_orphan_one', [ __CLASS__, 'ajax_orphan_one' ] );
@@ -46,8 +47,39 @@ class SBSK_Images_Tools {
 		);
 	}
 
-	/** Every image we can work on, oldest first so batching is stable. */
-	private static function ids() {
+	/**
+	 * Every image we can work on, oldest first so batching is stable.
+	 *
+	 * A run is many small requests, and each used to fetch the whole id list
+	 * again before taking its five. The list is kept for the run instead, and
+	 * dropped when the run finishes or ten minutes pass.
+	 */
+	private static function ids( $for_run = false ) {
+		$key = 'sbsk_images_run_' . get_current_user_id();
+
+		if ( $for_run ) {
+			$held = get_transient( $key );
+
+			if ( is_array( $held ) ) {
+				return $held;
+			}
+		}
+
+		$ids = self::query_ids();
+
+		if ( $for_run ) {
+			set_transient( $key, $ids, 10 * MINUTE_IN_SECONDS );
+		}
+
+		return $ids;
+	}
+
+	/** Forget the list held for a run. */
+	private static function forget_run() {
+		delete_transient( 'sbsk_images_run_' . get_current_user_id() );
+	}
+
+	private static function query_ids() {
 		return get_posts(
 			[
 				'post_type'      => 'attachment',
@@ -69,34 +101,59 @@ class SBSK_Images_Tools {
 		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type LIKE 'image/%'" );
 	}
 
+	/**
+	 * One pass over the library. The per size totals the report needs are
+	 * gathered on the same pass, so the report no longer walks it a second time.
+	 */
 	public static function summary() {
-		$ids     = self::ids();
-		$missing = 0;
-		$stale   = 0;
+		$ids         = self::ids();
+		$only        = SBSK_Images_Cleaner::chosen();
+		$missing     = 0;
+		$stale       = 0;
+		$sizes       = 0;
+		$stale_sizes = 0;
+		$stale_files = 0;
+		$stale_names = [];
 
 		foreach ( $ids as $id ) {
-			$meta = (array) wp_get_attachment_metadata( $id );
+			$meta   = (array) wp_get_attachment_metadata( $id );
+			$absent = SBSK_Images_Rebuild::missing_all( $id, $meta, $only );
+			$names  = SBSK_Images_Rebuild::stale( $id, $meta, $only );
 
-			if ( SBSK_Images_Rebuild::missing_all( $id, $meta ) ) {
+			if ( $absent ) {
 				$missing++;
+				$sizes += count( $absent );
 			}
 
-			if ( SBSK_Images_Rebuild::stale( $id, $meta ) ) {
+			if ( $names ) {
 				$stale++;
+				$stale_sizes += count( $names );
+				$stale_files += SBSK_Images_Rebuild::stale_files( $id, $meta, $only );
+
+				foreach ( $names as $name ) {
+					$stale_names[ $name ] = true;
+				}
 			}
 		}
 
+		$library = self::library_total();
+
 		return [
-			'total'   => count( $ids ),
-			'library' => self::library_total(),
-			'skipped' => max( 0, self::library_total() - count( $ids ) ),
-			'missing' => $missing,
-			'stale'   => $stale,
+			'total'       => count( $ids ),
+			'library'     => $library,
+			'skipped'     => max( 0, $library - count( $ids ) ),
+			'missing'     => $missing,
+			'stale'       => $stale,
+			'sizes'       => $sizes,
+			'stale_sizes' => $stale_sizes,
+			'stale_files' => $stale_files,
+			'stale_names' => array_keys( $stale_names ),
 		];
 	}
 
 	public static function ajax_count() {
 		self::guard();
+		self::forget_run();
 		wp_send_json_success( self::summary() );
 	}
 
@@ -113,21 +170,17 @@ class SBSK_Images_Tools {
 		$force   = ! empty( $_POST['force'] );
 		$size    = isset( $_POST['batch'] ) ? (int) $_POST['batch'] : self::BATCH;
 		$size    = max( 1, min( self::BATCH, $size ) );
-		$ids     = array_slice( self::ids(), $offset, $size );
+		$ids     = array_slice( self::ids( true ), $offset, $size );
 		$built   = 0;
 		$removed = 0;
 		$files   = 0;
 
 		$mode = isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : 'build';
 
-		// Only sizes that are actually registered can be asked for.
-		$asked  = isset( $_POST['sizes'] ) ? (array) wp_unslash( $_POST['sizes'] ) : [];
-		$asked  = array_map( 'sanitize_text_field', $asked );
-		$chosen = array_values( array_intersect( $asked, array_keys( SBSK_Images_Rebuild::all_wanted() ) ) );
-
-		if ( $force && ! $chosen ) {
-			$chosen = array_keys( SBSK_Images_Rebuild::all_wanted() );
-		}
+		// The sizes ticked on the page, saved for this user. Everything on the page
+		// works within them: a forced rebuild remakes them, a build fills in the
+		// missing ones among them, and a clean removes only the old ones among them.
+		$chosen = SBSK_Images_Cleaner::chosen();
 		$last  = 0;
 		$items = [];
 
@@ -135,7 +188,7 @@ class SBSK_Images_Tools {
 			$last = $id;
 
 			if ( $mode === 'clean' ) {
-				$result   = SBSK_Images_Rebuild::clean( $id );
+				$result   = SBSK_Images_Rebuild::clean( $id, $chosen );
 				$removed += count( $result['removed'] );
 				$files   += (int) $result['files'];
 
@@ -155,7 +208,7 @@ class SBSK_Images_Tools {
 				continue;
 			}
 
-			$made   = SBSK_Images_Rebuild::build( $id, true );
+			$made   = SBSK_Images_Rebuild::build( $id, true, $chosen );
 			$built += count( $made );
 
 			if ( $made ) {
@@ -165,6 +218,10 @@ class SBSK_Images_Tools {
 					'sizes' => $made,
 				];
 			}
+		}
+
+		if ( count( $ids ) < $size ) {
+			self::forget_run();
 		}
 
 		wp_send_json_success(
@@ -206,6 +263,19 @@ class SBSK_Images_Tools {
 
 		return $url ? $url : (string) wp_get_attachment_url( $id );
 	}
+	/** The sizes list for one image, for a pane that has just opened. */
+	public static function ajax_panel() {
+		self::guard();
+
+		$id = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
+
+		if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
+			wp_send_json_error( [ 'message' => __( 'Not allowed.', 'sb-site-kit' ) ], 403 );
+		}
+
+		wp_send_json_success( [ 'html' => self::sizes_list( $id ) ] );
+	}
+
 	public static function ajax_single() {
 		self::guard();
 
@@ -235,25 +305,12 @@ class SBSK_Images_Tools {
 
 		require_once __DIR__ . '/class-sbsk-images-orphans.php';
 
-		$summary = self::summary();
-		$orphans = SBSK_Images_Orphans::find();
-		$stale   = 0;
-		$missing = 0;
-
-		$stale_names = [];
-		$stale_files = 0;
-
-		foreach ( self::ids() as $id ) {
-			$meta     = (array) wp_get_attachment_metadata( $id );
-			$missing += count( SBSK_Images_Rebuild::missing_all( $id, $meta ) );
-			$names        = SBSK_Images_Rebuild::stale( $id, $meta );
-			$stale       += count( $names );
-			$stale_files += SBSK_Images_Rebuild::stale_files( $id, $meta );
-
-			foreach ( $names as $name ) {
-				$stale_names[ $name ] = true;
-			}
-		}
+		$summary     = self::summary();
+		$orphans     = SBSK_Images_Orphans::find();
+		$missing     = $summary['sizes'];
+		$stale       = $summary['stale_sizes'];
+		$stale_files = $summary['stale_files'];
+		$stale_names = array_fill_keys( $summary['stale_names'], true );
 
 		$base  = trailingslashit( wp_upload_dir()['basedir'] );
 		$stats = [];
@@ -263,8 +320,16 @@ class SBSK_Images_Tools {
 		$deletable = 0;
 		$held      = 0;
 
+		// The reference lookups are three unindexed queries per file, so each
+		// file is looked up once here and the rows below reuse the answer.
+		$refs = [];
+		$kept = [];
+
 		foreach ( $orphans['files'] as $file ) {
-			if ( SBSK_Images_Orphans::is_kept( $file['path'] ) || SBSK_Images_Orphans::references( $file['path'] ) ) {
+			$refs[ $file['path'] ] = SBSK_Images_Orphans::references( $file['path'] );
+			$kept[ $file['path'] ] = SBSK_Images_Orphans::is_kept( $file['path'] );
+
+			if ( $kept[ $file['path'] ] || $refs[ $file['path'] ] ) {
 				$held++;
 
 				continue;
@@ -306,15 +371,15 @@ class SBSK_Images_Tools {
 				$index++;
 				$relative = str_replace( $base, '', $file['path'] );
 				$url      = trailingslashit( wp_upload_dir()['baseurl'] ) . str_replace( '%2F', '/', rawurlencode( $relative ) );
-				$used     = SBSK_Images_Orphans::references( $file['path'] );
-				$kept     = SBSK_Images_Orphans::is_kept( $file['path'] );
+				$used     = $refs[ $file['path'] ];
+				$is_kept  = $kept[ $file['path'] ];
 				$state    = '';
 
 				if ( $used ) {
 					$state = '<span class="sbsk-report__used">' . esc_html__( 'in use:', 'sb-site-kit' ) . ' ' . esc_html( implode( ', ', $used ) ) . '</span>';
 				}
 
-								$classes = $kept ? [ 'is-kept' ] : [];
+								$classes = $is_kept ? [ 'is-kept' ] : [];
 
 				if ( $index > 25 ) {
 					$classes[] = 'is-extra';
@@ -334,7 +399,7 @@ class SBSK_Images_Tools {
 				$rows .= '<span class="sbsk-report__name"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener">' . esc_html( $relative ) . '</a>' . $pill . $state . '</span></td>';
 				$rows .= '<td class="sbsk-report__size">' . esc_html( size_format( $file['bytes'] ) ) . '</td>';
 				$rows .= '<td class="sbsk-report__action">';
-				$rows .= '<button type="button" class="button sbsk-report__keep" data-file="' . esc_attr( $relative ) . '" data-keep="' . ( $kept ? '0' : '1' ) . '">' . esc_html( $kept ? __( 'Stop keeping', 'sb-site-kit' ) : __( 'Keep', 'sb-site-kit' ) ) . '</button>';
+				$rows .= '<button type="button" class="button sbsk-report__keep" data-file="' . esc_attr( $relative ) . '" data-keep="' . ( $is_kept ? '0' : '1' ) . '">' . esc_html( $is_kept ? __( 'Stop keeping', 'sb-site-kit' ) : __( 'Keep', 'sb-site-kit' ) ) . '</button>';
 				$rows .= '<button type="button" class="button sbsk-report__delete" data-file="' . esc_attr( $relative ) . '">' . esc_html__( 'Delete', 'sb-site-kit' ) . '</button>';
 				$rows .= '</td></tr>';
 			}
@@ -385,26 +450,44 @@ class SBSK_Images_Tools {
 		}
 
 		$offset = isset( $_POST['offset'] ) ? max( 0, (int) $_POST['offset'] ) : 0;
-		$found  = SBSK_Images_Orphans::find();
-		$paths  = wp_list_pluck( $found['files'], 'path' );
-		$total  = count( $paths );
-		$batch  = array_slice( $paths, $offset, self::ORPHAN_BATCH );
+		$key    = 'sbsk_orphans_run_' . get_current_user_id();
+
+		// The uploads folder used to be walked again for every twenty files. The
+		// list is found once at the start of a run and held until it finishes.
+		$paths = $offset > 0 ? get_transient( $key ) : false;
+
+		if ( ! is_array( $paths ) ) {
+			$found = SBSK_Images_Orphans::find();
+			$paths = wp_list_pluck( $found['files'], 'path' );
+			set_transient( $key, $paths, 10 * MINUTE_IN_SECONDS );
+		}
+
+		$total = count( $paths );
+		$batch = array_slice( $paths, $offset, self::ORPHAN_BATCH );
 
 		if ( ! $batch ) {
+			delete_transient( $key );
 			wp_send_json_success( [ 'removed' => 0, 'bytes' => 0, 'offset' => $offset, 'total' => $total, 'done' => true ] );
 		}
 
+		// remove() checks every file again before touching it, so a held list
+		// going a little stale costs nothing.
 		$result = SBSK_Images_Orphans::remove( $batch );
+		$done   = count( $batch ) < self::ORPHAN_BATCH;
+
+		if ( $done ) {
+			delete_transient( $key );
+		}
 
 		wp_send_json_success(
 			[
 				'removed' => (int) $result['removed'],
 				'skipped' => (int) $result['skipped'],
 				'bytes'   => (int) $result['bytes'],
-				// Anything left alone stays in the list, so step past it.
-				'offset'  => $offset + (int) $result['skipped'],
+				// The list is fixed for the run, so every batch steps a full batch on.
+				'offset'  => $offset + count( $batch ),
 				'total'   => $total,
-				'done'    => count( $batch ) < self::ORPHAN_BATCH,
+				'done'    => $done,
 			]
 		);
 	}
@@ -519,8 +602,12 @@ class SBSK_Images_Tools {
 		$html  = '<div class="postbox sbsk-attachment-box">';
 		$html .= '<div class="postbox-header"><h2 class="hndle">' . esc_html__( 'SocialBUMP Site Kit Sizes', 'sb-site-kit' ) . '</h2></div>';
 		$html .= '<div class="inside">';
-		$html .= '<div class="sbsk-attachment-sizes" data-id="' . esc_attr( $post->ID ) . '" data-nonce="' . esc_attr( wp_create_nonce( 'sbsk_images' ) ) . '">';
-		$html .= self::sizes_list( $post->ID );
+		// The list itself is fetched when the pane opens. This filter runs for every
+		// attachment the media library sends to the browser, forty a page, and the
+		// list is a file check per size, so building it here for all of them cost
+		// hundreds of stats a page for panes nobody opened.
+		$html .= '<div class="sbsk-attachment-sizes" data-id="' . esc_attr( $post->ID ) . '" data-nonce="' . esc_attr( wp_create_nonce( 'sbsk_images' ) ) . '" data-lazy="1">';
+		$html .= '<p class="sbsk-sizes sbsk-sizes--loading">' . esc_html__( 'Loading sizes...', 'sb-site-kit' ) . '</p>';
 		$html .= '<button type="button" class="button sbsk-regenerate">' . esc_html__( 'Regenerate sizes', 'sb-site-kit' ) . '</button>';
 		$html .= '</div></div></div>';
 
