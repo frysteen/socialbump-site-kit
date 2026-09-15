@@ -33,7 +33,8 @@ switched on gets its own page in the menu.
 | Group | What is in it |
 | --- | --- |
 | Content | Excerpt character counter, excerpts for pages, shortcodes in excerpts |
-| Images | Image sizes, tidy file names and alt text on upload, rebuilding thumbnails |
+| Images | Image sizes, tidy file names and alt text on upload |
+| Image Cleaner | Missing thumbnails, old sizes, orphaned files, and the sizes panel in the media library. Off by default |
 | WooCommerce | Corrections and tweaks, listed below |
 | Admin Settings | Block admin access, hide the front end toolbar, SocialBUMP admin colours |
 
@@ -52,6 +53,19 @@ out and cannot be switched on without it. The modules in it:
 
 These were built on drivingevents.com.au, because the hub has no WooCommerce. See
 the shared notes on working from a client site.
+
+A group is on until switched off, unless its section carries default false, which
+is how Image Cleaner starts off on a fresh site. A group with one module shows
+that module's page as its own; Images and Image Cleaner are both like that.
+
+The Modules page cards can be collapsed to their title, by the chevron or by
+clicking the title, and put in any order with Reorder Cards. Both are per user,
+kept in user meta by the shared SocialBUMP_Cards class, and alphabetical until
+changed. The order is the same everywhere: ordered_groups() feeds the cards, the
+tab bar, the sidebar submenu and the admin bar, with Modules first and Updates
+and Publishing last. Saving an order also drops this menu's entry from Admin and
+Site Enhancements' submenu order, so ASE stops sitting on top of it. Only the
+Modules page does any of this; group pages stay plain.
 
 ## What each module does
 
@@ -123,10 +137,24 @@ resolves too. No settings.
 
 ### Images
 
-**Images.** The largest module in the kit, and the one to be most careful with.
-Four classes: SBSK_Images for the sizes and the settings page, _Rebuild for the
-building and clearing, _Tools for the screens and every AJAX handler, and
-_Orphans for what is on disk but not in the database.
+**Images and Image Cleaner.** The largest part of the kit, and the one to be most
+careful with. Two modules since the split. Images (modules/images) holds
+SBSK_Images for the sizes and the settings page, and _Rebuild, the size engine:
+building, clearing, present(), owned sizes. Image Cleaner (modules/image-cleaner)
+holds _Tools for the page, the AJAX handlers and the attachment panels, _Orphans
+for what is on disk but not in the database, and _Cleaner for its page. The
+engine stays with Images because registering a size is what records it as ours,
+and that has to keep happening whether or not the cleaner is on. The cleaner does
+not need Images switched on: its boot loads the two Images classes itself, which
+registers nothing, and it covers whatever sizes anyone has registered.
+
+With the cleaner off nothing of it loads, and that is the point: the sizes panel
+used to be built for every attachment the media library listed, about 600 file
+checks a page, and the edit screens carried a stylesheet, a script and jQuery
+for it. styles() only enqueues on upload.php, post.php and post-new.php while
+the cleaner is on. The old rebuild_on switch became the cleaner's group switch:
+sbsk_split_image_cleaner() in the main file carries it across once, records
+scheme 2 in sbsk_image_split, and drops rebuild_on from the settings.
 
 #### The rule that everything else depends on
 
@@ -360,6 +388,8 @@ are the three rules worth reading before you touch it.
 | sbsk_module_settings | each module settings |
 | sbsk_owned_image_sizes | image sizes the kit created |
 | sbsk_kept_orphans | files in uploads it was told to leave alone, kept as paths relative to the uploads folder |
+| sbsk_image_split | that the Image Cleaner split migration has run, and which scheme |
+| socialbump_cards (user meta) | each user's card order and collapsed cards, per page key |
 | sbsk_github_token | encrypted, hub only, and deleted on any site that is not the hub |
 | sbsk_pending_changes | notes for the next release, hub only, deleted elsewhere |
 
@@ -382,6 +412,12 @@ are the three rules worth reading before you touch it.
 - When testing a change in the same request that wrote the file, the old class
   is already loaded and you will see the old behaviour. Check in a fresh
   request before believing a change did not work. This wasted time twice.
+- A module's unavailable callable must never call is_enabled() on another
+  module: is_enabled() asks every module in the group whether it is unavailable,
+  so that goes round in a circle. Read get_states() instead. The cleaner had a
+  dependency on Images written that way before it became its own group.
+- render_other_sizes() reads a note key that editable_sizes() does not set;
+  it is read with empty() now. Reading it blind warned on every size row.
 
 <!-- shared:start -->
 
@@ -414,6 +450,21 @@ Useful on any site, Site Kit. About what AI crawlers read, SEO for AI.
 Change one, change all three, then check the md5s match. Both are written so
 that whichever plugin loads first wins and the others stand aside, so a site
 running mixed versions still works.
+
+### The Modules page cards
+
+SocialBUMP_Cards and module-cards.js give a page of cards a chevron to collapse
+each to its title (the title toggles too), Collapse all, Expand all and Collapse
+disabled links above the grid, and a Reorder Cards button below it that opens a
+list to drag. Order and collapsed state are per user, in user meta, alphabetical
+until changed, and saved over AJAX as they change, never through the form. A
+plugin wires it with register( prefix, menu slug ) at boot, sort() for the order,
+container_attributes() on the grid, card_attribute() on each card, and toolbar()
+twice, links above and reorder below. A card's first child must be its head. The
+saved order is meant to drive the menu, the tab bar and the admin bar as well,
+and saving one drops that menu's entry from ASE's submenu order. The CSS is the
+chunk at the end of Site Kit's admin.css marked Shared, generic .sb- classes,
+to be copied as is. Both files are identical wherever they exist.
 
 ### The shared admin bar item
 
@@ -500,10 +551,12 @@ upgrader_process_complete, which settles it.
 The Update now button on each Updates page goes through update-core.php, the
 bulk path the dashboard uses: maintenance mode on, files swapped, maintenance
 mode off, plugin never deactivated. It used to go through update.php, the
-single plugin path, which deactivates the plugin first and reactivates it
-silently in the same request. When that silent step failed the plugin was left
-switched off with nothing in any log, which is exactly what happened on a
-client site. Keep the bulk path.
+single plugin path, which deactivates the plugin first and does not reactivate
+it in PHP at all: the results page carries a hidden iframe that loads
+update.php?action=activate-plugin, and that iframe is the reactivation. Leave
+the page before it loads, or have anything block it, and the plugin stays off
+with nothing in any log. That happened twice on a client site. Keep the bulk
+path.
 
 ### What a client site must not carry
 
@@ -643,6 +696,8 @@ Every plugin has the same shape:
 | includes/class-<pre>-transfer.php | settings export and import |
 | includes/class-<pre>-docs.php | these notes, and the panel on Publishing |
 | includes/class-socialbump-admin-bar.php | shared, identical in all three |
+| includes/class-socialbump-cards.php | shared: collapsible, reorderable cards. Site Kit has it; the others get it with their Modules pages |
+| assets/js/module-cards.js | shared, goes with the cards class |
 | assets/css/admin.css | everything the admin pages look like |
 | assets/js/save-state.js | shared, identical in all three |
 | vendor/plugin-update-checker | the updater library, left alone |

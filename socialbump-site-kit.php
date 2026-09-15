@@ -3,7 +3,7 @@
  * Plugin Name: SocialBUMP Site Kit
  * Plugin URI:  https://socialbump.com.au
  * Description: SocialBUMP base styling, ACF fields, shortcodes and admin tweaks. Switch each feature on or off under SB Site Kit.
- * Version:     1.0.6
+ * Version:     1.0.7
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author:      SocialBUMP
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SBSK_VERSION', '1.0.6' );
+define( 'SBSK_VERSION', '1.0.7' );
 define( 'SBSK_FILE', __FILE__ );
 define( 'SBSK_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SBSK_URL', plugin_dir_url( __FILE__ ) );
@@ -119,6 +119,39 @@ function sbsk_log_change( $text ) {
 	update_option( 'sbsk_pending_changes', array_slice( $list, -50 ), false );
 }
 /**
+ * Image Cleaner used to be a switch inside the Images page.
+ *
+ * It is its own module now, so the tools and the media library panel can be
+ * left off on a site that only wants the size list. The old switch is carried
+ * across as it stood, rather than quietly turning a site's tools off, and the
+ * setting it lived in is dropped. Runs once and records that it has.
+ */
+function sbsk_split_image_cleaner() {
+	if ( (int) get_option( 'sbsk_image_split' ) >= 2 ) {
+		return;
+	}
+
+	$settings = (array) get_option( SBSK_Modules::SETTINGS_OPTION, [] );
+	$groups   = (array) get_option( SBSK_Modules::GROUPS_OPTION, [] );
+
+	// Image Cleaner is a group of its own, so its switch is the group switch.
+	// The old setting defaulted to on, so an absent one counts as on.
+	if ( ! array_key_exists( 'image-cleaner', $groups ) ) {
+		$groups['image-cleaner'] = ( ! isset( $settings['images']['rebuild_on'] ) || ! empty( $settings['images']['rebuild_on'] ) ) ? 1 : 0;
+
+		update_option( SBSK_Modules::GROUPS_OPTION, $groups );
+	}
+
+	if ( isset( $settings['images']['rebuild_on'] ) ) {
+		unset( $settings['images']['rebuild_on'] );
+
+		update_option( SBSK_Modules::SETTINGS_OPTION, $settings );
+	}
+
+	update_option( 'sbsk_image_split', 2, false );
+}
+
+/**
  * Load the plugin. Unlike Bricks Tweaks this has no theme requirement:
  * a module that needs Bricks, ACF or WooCommerce declares it in 'requires'.
  */
@@ -126,9 +159,12 @@ function sbsk_boot() {
 	require_once SBSK_PATH . 'includes/class-sbsk-modules.php';
 	require_once SBSK_PATH . 'includes/class-socialbump-admin-bar.php';
 require_once SBSK_PATH . 'includes/class-socialbump-overview.php';
+	require_once SBSK_PATH . 'includes/class-socialbump-cards.php';
 	require_once SBSK_PATH . 'includes/class-sbsk-settings.php';
 	require_once SBSK_PATH . 'includes/class-sbsk-updates.php';
 	require_once SBSK_PATH . 'includes/class-sbsk-transfer.php';
+
+	sbsk_split_image_cleaner();
 
 	SBSK_Modules::instance()->boot();
 	SBSK_Settings::instance()->boot();

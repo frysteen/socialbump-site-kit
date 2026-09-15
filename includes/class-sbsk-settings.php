@@ -29,12 +29,42 @@ class SBSK_Settings {
 		add_action( 'admin_post_sbsk_save_groups', [ $this, 'save_groups' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'styles' ] );
 		add_action( 'admin_bar_menu', [ $this, 'admin_bar' ], 100 );
+
+		// Drag to reorder and collapse on the Modules page, kept per user.
+		if ( class_exists( 'SocialBUMP_Cards' ) ) {
+			SocialBUMP_Cards::register( 'sbsk', self::PAGE_SLUG );
+		}
 	}
 
 	/**
 	 * SB Site Kit gets its own admin menu, just below Bricks.
 	 * It lands on the feature switches. Modules that are switched on can add their own pages under it.
 	 */
+	/**
+	 * The groups in the order this user arranged them on the Modules page, or by
+	 * name until they have. Feeds the menu, the tab bar and the admin bar, so the
+	 * order is the same everywhere. Modules stays first; Updates and Publishing
+	 * stay last; only the groups between them move.
+	 */
+	public function ordered_groups() {
+		$states   = SBSK_Modules::instance()->group_states();
+		$sections = $this->sections();
+		$titles   = [];
+
+		foreach ( $states as $group => $on ) {
+			$titles[ $group ] = isset( $sections[ $group ]['title'] ) ? $sections[ $group ]['title'] : $group;
+		}
+
+		$ids     = class_exists( 'SocialBUMP_Cards' ) ? SocialBUMP_Cards::sort( $titles, 'sbsk_groups' ) : array_keys( $titles );
+		$ordered = [];
+
+		foreach ( $ids as $group ) {
+			$ordered[ $group ] = $states[ $group ];
+		}
+
+		return $ordered;
+	}
+
 	public function add_menu() {
 		$sections = $this->sections();
 
@@ -63,7 +93,7 @@ class SBSK_Settings {
 		 * own settings page, such as Images, links straight to that instead of
 		 * showing a list with a single card on it.
 		 */
-		foreach ( SBSK_Modules::instance()->group_states() as $group => $on ) {
+		foreach ( $this->ordered_groups() as $group => $on ) {
 			if ( ! $on ) {
 				continue;
 			}
@@ -332,10 +362,25 @@ class SBSK_Settings {
 		echo '<form method="post" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		echo '<input type="hidden" name="action" value="sbsk_save_groups">';
 		wp_nonce_field( 'sbsk_save_groups' );
-		echo '<section class="sbsk-section"><div class="sbsk-section__head"><h2>' . esc_html__( 'Modules', 'sb-site-kit' ) . '</h2><p>' . esc_html__( 'Each one switched on adds its own page to the menu.', 'sb-site-kit' ) . '</p></div>';
-		echo '<div class="sbsk-grid">';
+		echo '<section class="sbsk-section"><div class="sbsk-section__head"><h2>' . esc_html__( 'Modules', 'sb-site-kit' ) . '</h2><p>' . esc_html__( 'Each one switched on adds its own page to the menu. Reorder puts them in the order you want, here and in the menus, and each one collapses to its title.', 'sb-site-kit' ) . '</p></div>';
+
+		// By name until the user drags them; then in their order, new ones by name at the end.
+		$titles = [];
 
 		foreach ( $sections as $group => $section ) {
+			$titles[ $group ] = $section['title'];
+		}
+
+		$ordered = class_exists( 'SocialBUMP_Cards' ) ? SocialBUMP_Cards::sort( $titles, 'sbsk_groups' ) : array_keys( $titles );
+
+		if ( class_exists( 'SocialBUMP_Cards' ) ) {
+			echo SocialBUMP_Cards::toolbar( 'sbsk_groups', 'links' );
+		}
+
+		echo '<div class="sbsk-grid"' . ( class_exists( 'SocialBUMP_Cards' ) ? SocialBUMP_Cards::container_attributes( 'sbsk_groups', 'sbsk' ) : '' ) . '>';
+
+		foreach ( $ordered as $group ) {
+			$section = $sections[ $group ];
 			$modules = SBSK_Modules::instance()->in_group( $group );
 
 			if ( ! $modules ) {
@@ -347,7 +392,7 @@ class SBSK_Settings {
 
 			$needs = SBSK_Modules::instance()->group_needs( $group );
 
-			$card  = '<div class="sbsk-card' . ( $on && ! $needs ? ' is-on' : '' ) . ( $needs ? ' is-unavailable' : '' ) . '">';
+			$card  = '<div class="sbsk-card' . ( $on && ! $needs ? ' is-on' : '' ) . ( $needs ? ' is-unavailable' : '' ) . '"' . ( class_exists( 'SocialBUMP_Cards' ) ? SocialBUMP_Cards::card_attribute( $group ) : '' ) . '>';
 			$card .= '<div class="sbsk-card__head"><h3>' . esc_html( $section['title'] ) . '</h3>';
 			$card .= '<label class="sbsk-switch"><input type="checkbox" name="sbsk_groups[' . esc_attr( $group ) . ']" value="1" ' . checked( $on, true, false ) . ' ' . disabled( (bool) $needs, true, false ) . '>';
 			$card .= '<span class="sbsk-switch__track"><span class="sbsk-switch__dot"></span></span>';
@@ -386,7 +431,13 @@ class SBSK_Settings {
 			echo $card . '</div>';
 		}
 
-		echo '</div></section>';
+		echo '</div>';
+
+		if ( class_exists( 'SocialBUMP_Cards' ) ) {
+			echo SocialBUMP_Cards::toolbar( 'sbsk_groups', 'reorder' );
+		}
+
+		echo '</section>';
 		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ) );
 		echo '</form></div>';
 	}
@@ -581,7 +632,7 @@ class SBSK_Settings {
 		$sections = $this->sections();
 		$items    = [ self::PAGE_SLUG => __( 'Modules', 'sb-site-kit' ) ];
 
-		foreach ( SBSK_Modules::instance()->group_states() as $group => $on ) {
+		foreach ( $this->ordered_groups() as $group => $on ) {
 			if ( ! $on || ! SBSK_Modules::instance()->in_group( $group ) ) {
 				continue;
 			}
@@ -656,8 +707,11 @@ class SBSK_Settings {
 	}
 
 	public function styles( $hook ) {
-		// The media modal shows our sizes panel, so it needs these as well.
-		$media = in_array( $hook, [ 'upload.php', 'post.php', 'post-new.php' ], true );
+		// The media modal and the editor show the Image Cleaner's sizes panel, so
+		// they need these too, but only while that module is switched on. Loading
+		// them on every edit screen regardless put a stylesheet, a script and
+		// jQuery on pages that had nothing of ours to show.
+		$media = in_array( $hook, [ 'upload.php', 'post.php', 'post-new.php' ], true ) && SBSK_Modules::instance()->is_enabled( 'image-cleaner' );
 
 		if ( strpos( (string) $hook, self::PAGE_SLUG ) === false && ! $media ) {
 			return;
@@ -682,6 +736,13 @@ class SBSK_Settings {
 		$js_ver = file_exists( $js ) ? SBSK_VERSION . '.' . filemtime( $js ) : SBSK_VERSION;
 
 		wp_enqueue_script( 'sbsk-admin', SBSK_URL . 'assets/js/admin.js', [ 'jquery' ], $js_ver, true );
+
+		// Shared with the other SocialBUMP plugins: cards that drag and collapse.
+		$cards = SBSK_PATH . 'assets/js/module-cards.js';
+
+		if ( file_exists( $cards ) ) {
+			wp_enqueue_script( 'sb-module-cards', SBSK_URL . 'assets/js/module-cards.js', [], SBSK_VERSION . '.' . filemtime( $cards ), true );
+		}
 	}
 
 
@@ -848,7 +909,12 @@ class SBSK_Settings {
 			],
 			'images'     => [
 				'title'       => __( 'Images', 'sb-site-kit' ),
-				'description' => __( 'Image sizes, tidy titles and alt text, and rebuilding.', 'sb-site-kit' ),
+				'description' => __( 'Image sizes, and tidy titles and alt text on upload.', 'sb-site-kit' ),
+			],
+			'image-cleaner' => [
+				'title'       => __( 'Image Cleaner', 'sb-site-kit' ),
+				'description' => __( 'Missing thumbnails, old sizes and orphaned files. Off unless you are cleaning up.', 'sb-site-kit' ),
+				'default'     => false,
 			],
 			'woocommerce' => [
 				'title'       => __( 'WooCommerce', 'sb-site-kit' ),

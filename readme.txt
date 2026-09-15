@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.6
+Stable tag: 1.0.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,12 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.0.7 =
+* Images is now two modules. Image Settings keeps the sizes and the upload tidying. Image Cleaner, its own module and off on new sites, holds the scan, the thumbnail rebuild, the old size clean up, the orphan scan and the sizes panel in the media library. With the cleaner off, the media library and the editor no longer load any of it.
+* Your existing rebuild switch is carried across as the Image Cleaner switch, so nothing changes on a site until you turn it off.
+* The Modules page cards collapse to their title, and Reorder Cards puts them in the order you want. Both are remembered per user, and the order is followed by the tab bar, the sidebar menu and the admin bar.
+* Fixed a warning on the Images page for every size that can be edited.
+
 = 1.0.6 =
 * The Update now button on the Updates page now runs the update the same way the WordPress dashboard does, under maintenance mode, instead of deactivating and reactivating the plugin. The old way could leave the plugin switched off after an update.
 

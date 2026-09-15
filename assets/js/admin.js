@@ -462,14 +462,6 @@
 		} );
 
 		// Images page: the sizes list follows its switch, and reset asks first.
-		var $rebuildOn = $( '#sbsk-rebuild-on' );
-
-		if ( $rebuildOn.length ) {
-			$rebuildOn.on( 'change', function () {
-				$( '#sbsk-rebuild-body' ).prop( 'hidden', ! this.checked );
-			} );
-		}
-
 		var $sizesOn = $( '#sbsk-sizes-on' );
 
 		if ( $sizesOn.length ) {

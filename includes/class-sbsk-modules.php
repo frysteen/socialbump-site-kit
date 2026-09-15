@@ -169,8 +169,12 @@ class SBSK_Modules {
 		$saved  = (array) get_option( self::GROUPS_OPTION, [] );
 		$states = [];
 
-		foreach ( array_keys( SBSK_Settings::instance()->sections() ) as $group ) {
-			$states[ $group ] = $this->group_needs( $group ) ? false : ( array_key_exists( $group, $saved ) ? (bool) $saved[ $group ] : true );
+		// A group is on until it is switched off, unless its section says otherwise:
+		// a tool nobody needs every day starts off.
+		foreach ( SBSK_Settings::instance()->sections() as $group => $section ) {
+			$default = ! ( isset( $section['default'] ) && $section['default'] === false );
+
+			$states[ $group ] = $this->group_needs( $group ) ? false : ( array_key_exists( $group, $saved ) ? (bool) $saved[ $group ] : $default );
 		}
 
 		return $states;
