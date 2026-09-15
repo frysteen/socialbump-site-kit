@@ -198,6 +198,11 @@ The engine takes it as an $only argument on stale(), missing_all(), build(),
 clean() and stale_files(). Null means every size, which is what the attachment
 panel and a single image rebuild still pass.
 
+Each row is a flex line that wraps: a long size name such as
+woocommerce_gallery_thumbnail pushes its pixels down to their own line, right
+aligned, rather than out of the box. Rows are striped, every other one on a faint
+grey, purely to be easier to read down a long list.
+
 #### How the engine and the tools keep their cost down
 
 - make_sizes() decodes an image once and makes every wanted size from it with

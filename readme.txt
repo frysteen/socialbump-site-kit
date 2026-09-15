@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.8
+Stable tag: 1.0.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.0.9 =
+* Long size names on the Image Cleaner page no longer overflow their box; the pixel size drops to its own line. The size rows are striped to be easier to read.
+
 = 1.0.8 =
 * The Image Cleaner page now lists every image size, grouped into your sizes, WordPress, WooCommerce and anything else, with a tick per size. The scan, Build Thumbnails, a forced rebuild and Remove old sizes all work on just the sizes you tick. Your choice is saved against your login, so it does not change what anyone else sees.
 * The Sizes list has an Edit Sizes link across to the Images page.

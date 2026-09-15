@@ -1643,10 +1643,16 @@ table.sbsk-report tr.sbsk-report__morerow td {
 
 .sbsk-sizegroup__item {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: 8px;
-	padding: 3px 0;
+	gap: 2px 8px;
+	padding: 5px 6px;
+	border-radius: 3px;
 	font-size: 12px;
+}
+
+.sbsk-sizegroup__item:nth-child(odd) {
+	background: #f6f7f7;
 }
 
 .sbsk-sizegroup__item input {
@@ -1655,11 +1661,15 @@ table.sbsk-report tr.sbsk-report__morerow td {
 
 .sbsk-sizegroup__item code {
 	flex: 1 1 auto;
+	min-width: 0;
 	background: none;
 	padding: 0;
+	overflow-wrap: anywhere;
 }
 
+/* The pixels drop to their own line, right aligned, when the name is long. */
 .sbsk-sizegroup__item span {
+	margin-left: auto;
 	color: #787c82;
 	white-space: nowrap;
 }
