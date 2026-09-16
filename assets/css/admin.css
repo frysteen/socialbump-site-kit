@@ -967,22 +967,49 @@ table.sbsk-report td:last-child {
 }
 
 /* The image being worked on */
-.sbsk-progress__row {
+.sbsk-progress__line {
 	display: flex;
-	align-items: center;
+	align-items: baseline;
+	justify-content: space-between;
 	gap: 14px;
 }
 
-.sbsk-progress__main {
-	flex: 1 1 auto;
-	min-width: 0;
+.sbsk-progress__timer {
+	flex: none;
+	margin: 0 0 12px;
+	color: #787c82;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
 }
 
-.sbsk-progress__thumb {
-	flex: 0 0 auto;
-	width: 44px;
-	height: 44px;
+/* Sits exactly where the close cross does, and they swap. */
+.sbsk-progress__cancel {
+	position: absolute;
+	top: 6px;
+	right: 8px;
+	padding: 0 6px;
+	background: none;
+	border: 0;
+	color: #b32d2e;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.4;
+	cursor: pointer;
 }
+
+.sbsk-progress__cancel:hover {
+	color: #8a2424;
+}
+
+.sbsk-progress__cancel:disabled {
+	color: #a7aaad;
+	cursor: default;
+}
+
+
+
+
 
 .sbsk-progress__thumb img {
 	width: 44px;
@@ -1177,9 +1204,27 @@ table.sbsk-report tr.sbsk-report__morerow td {
 /* What each image gained, as it happens */
 .sbsk-progress__log {
 	margin: 10px 0 0;
-	max-height: 220px;
+	max-height: 420px;
 	overflow-y: auto;
 	font-size: 12px;
+}
+
+.sbsk-log__dims {
+	display: block;
+	margin: 1px 0 4px;
+	color: #787c82;
+	font-size: 11px;
+}
+
+.sbsk-progress__log li.is-skipped {
+	color: #787c82;
+}
+
+
+
+.sbsk-progress__log li.is-skipped em {
+	font-style: normal;
+	font-size: 11px;
 }
 
 .sbsk-progress__log > li {
@@ -1835,4 +1880,15 @@ table.sbsk-report tr.sbsk-report__morerow td {
 	justify-content: flex-end;
 	gap: 8px;
 	margin-top: 16px;
+}
+
+/* Amber, not red: a skipped size is a decision, not a failure. Last in the
+   file so it beats the green .sbsk-tick above it. */
+.sbsk-progress__log li.is-skipped .sbsk-tick--skip {
+	color: #b26200;
+}
+
+.sbsk-sizes li.is-skipped span:last-child em {
+	font-style: normal;
+	font-size: 11px;
 }

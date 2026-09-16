@@ -144,7 +144,9 @@
 			var nonce   = $rebuild.data( 'nonce' );
 
 			function buttons( on ) {
-				$rebuild.find( 'button' ).prop( 'disabled', ! on );
+				// Not the progress box's own controls: Cancel has to stay clickable while
+				// a run is going, which is the only time it is on screen.
+				$rebuild.find( 'button' ).not( '#sbsk-progress-cancel, #sbsk-progress-close' ).prop( 'disabled', ! on );
 
 				if ( on ) {
 					refreshBuild();
@@ -182,9 +184,81 @@
 
 			var retried = false;
 
+			/**
+			 * How long the run has been going, and how long each image is taking.
+			 * The average is the useful half: it says whether a big library will
+			 * take two minutes or twenty.
+			 */
+			var $timer  = $( '#sbsk-progress-timer' );
+			var $cancel = $( '#sbsk-progress-cancel' );
+			var $close  = $( '#sbsk-progress-close' );
+			var started = 0;
+			var ticking = null;
+			var seenNow = 0;
+			var stopped = false;
+
+			function spell( seconds ) {
+				if ( seconds < 60 ) {
+					return seconds + 's';
+				}
+
+				return Math.floor( seconds / 60 ) + 'm ' + ( seconds % 60 ) + 's';
+			}
+
+			function elapsed() {
+				return Math.max( 0, Math.round( ( Date.now() - started ) / 1000 ) );
+			}
+
+			function paintTimer() {
+				var seconds = elapsed();
+				var text    = spell( seconds );
+
+				if ( seenNow > 0 && seconds > 0 ) {
+					text += ' | ' + ( Math.round( ( seconds / seenNow ) * 100 ) / 100 ) + 's per image';
+				}
+
+				$timer.text( text );
+			}
+
+			function startClock() {
+				stopped = false;
+				started = Date.now();
+				seenNow = 0;
+
+				window.clearInterval( ticking );
+				paintTimer();
+				ticking = window.setInterval( paintTimer, 1000 );
+
+				$cancel.prop( 'hidden', false );
+				$close.prop( 'hidden', true );
+			}
+
+			/** Called however a run ends: finished, cancelled or failed. */
+			function stopClock() {
+				window.clearInterval( ticking );
+				ticking = null;
+				paintTimer();
+				$cancel.prop( 'hidden', true );
+				$close.prop( 'hidden', false );
+			}
+
+			$cancel.on( 'click', function () {
+				// The batch in flight finishes; nothing after it is asked for.
+				stopped = true;
+				$cancel.prop( 'disabled', true );
+				$status.text( 'Stopping after this batch...' );
+			} );
+
+			function finished( text ) {
+				stopClock();
+				$status.text( text + ' Took ' + spell( elapsed() ) + ( seenNow > 0 ? ', ' + ( Math.round( ( elapsed() / seenNow ) * 100 ) / 100 ) + 's per image.' : '.' ) );
+				$cancel.prop( 'disabled', false );
+			}
+
 			function batch( offset, total, force, mode, sizes ) {
 				$.post( ajaxurl, { action: 'sbsk_images_batch', nonce: nonce, offset: offset, force: force ? 1 : 0, mode: mode, sizes: sizes || [], batch: ( retried || force ) ? 1 : 5 } ).done( function ( response ) {
 					if ( ! response || ! response.success ) {
+						stopClock();
 						$status.text( 'Something went wrong. Try again.' );
 						buttons( true );
 						return;
@@ -196,6 +270,9 @@
 					totals.files += data.files;
 
 					var done = Math.min( data.offset, total );
+
+					seenNow = done;
+					paintTimer();
 
 					$bar.css( 'width', ( total ? Math.round( ( done / total ) * 100 ) : 100 ) + '%' );
 					$status.text( done + ' of ' + total + ' checked.' );
@@ -214,20 +291,27 @@
 								return '<li><span class="sbsk-tick">&#10003;</span>' + name + '</li>';
 							} ).join( '' );
 
-							var thumb = item.thumb ? '<img class="sbsk-log__thumb" src="' + item.thumb + '" alt="">' : '<span class="sbsk-log__thumb is-empty"></span>';
+							// A size that was asked for and not made says why, rather than
+							// leaving an image with nothing under it.
+							sizes += ( item.skipped || [] ).map( function ( miss ) {
+								return '<li class="is-skipped"><span class="sbsk-tick sbsk-tick--skip">&#10005;</span>' + miss.name + ' <em>' + miss.why + '</em></li>';
+							} ).join( '' );
 
-							$log.prepend( '<li class="sbsk-log__row">' + thumb + '<div class="sbsk-log__detail"><strong>' + item.name + '</strong><ul>' + sizes + '</ul></div></li>' );
+							var thumb = item.thumb ? '<img class="sbsk-log__thumb" src="' + item.thumb + '" alt="">' : '<span class="sbsk-log__thumb is-empty"></span>';
+							var dims  = item.dims ? '<span class="sbsk-log__dims">' + item.dims + '</span>' : '';
+
+							$log.prepend( '<li class="sbsk-log__row">' + thumb + '<div class="sbsk-log__detail"><strong>' + item.name + '</strong>' + dims + '<ul>' + sizes + '</ul></div></li>' );
 						} );
 
-						$log.find( 'li.sbsk-log__row:gt( 20 )' ).remove();
+						// The whole run stays in the list; the box scrolls.
 					}
 
 					if ( data.last && data.last.name ) {
 						$status.text( done + ' of ' + total + ' checked. ' + data.last.name );
 					}
 
-					if ( data.done || done >= total ) {
-						$status.text( 'Finished. ' + totals.built + ' sizes built, ' + totals.files + ' files removed.' );
+					if ( data.done || done >= total || stopped ) {
+						finished( ( stopped && ! data.done && done < total ? 'Stopped. ' : 'Finished. ' ) + totals.built + ' sizes built, ' + totals.files + ' files removed.' );
 
 						// A forced run is a deliberate act, so it does not stay armed.
 						if ( force ) {
@@ -257,6 +341,7 @@
 						return;
 					}
 
+					stopClock();
 					$status.text( 'The server did not answer. Anything already built has been kept, so you can start again from here.' );
 					buttons( true );
 				} );
@@ -269,13 +354,14 @@
 				$progress.prop( 'hidden', false );
 				$bar.css( 'width', '0%' );
 				$status.text( 'Working...' );
-				$( '#sbsk-progress-thumb' ).empty();
 				$( '#sbsk-progress-log' ).empty();
+				startClock();
 
 				$.post( ajaxurl, { action: 'sbsk_images_count', nonce: nonce } ).done( function ( response ) {
 					var total = ( response && response.success ) ? response.data.total : 0;
 
 					if ( ! total ) {
+						stopClock();
 						$status.text( 'No images found.' );
 						buttons( true );
 						return;
@@ -393,6 +479,7 @@
 			function clearOrphans( offset, cleared, freed ) {
 				$.post( ajaxurl, { action: 'sbsk_images_orphans', nonce: nonce, offset: offset } ).done( function ( response ) {
 					if ( ! response || ! response.success ) {
+						stopClock();
 						$status.text( 'Something went wrong. Nothing else was changed.' );
 						buttons( true );
 						return;
@@ -406,18 +493,22 @@
 					var seen = Math.min( data.offset, data.total );
 					var pct  = data.total ? Math.round( ( seen / data.total ) * 100 ) : 100;
 
+					seenNow = seen;
+					paintTimer();
+
 					$bar.css( 'width', pct + '%' );
 					$status.text( cleared + ' of ' + data.total + ' removed.' );
 
-					if ( data.done ) {
-						$bar.css( 'width', '100%' );
-						$status.text( 'Finished. ' + cleared + ' files removed, ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed.' );
+					if ( data.done || stopped ) {
+						$bar.css( 'width', data.done ? '100%' : pct + '%' );
+						finished( ( data.done ? 'Finished. ' : 'Stopped. ' ) + cleared + ' files removed, ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed.' );
 						scan( true );
 						return;
 					}
 
 					clearOrphans( data.offset, cleared, freed );
 				} ).fail( function () {
+					stopClock();
 					$status.text( 'The server did not answer. Nothing else was changed, and what was already removed has gone.' );
 					buttons( true );
 				} );
@@ -430,10 +521,10 @@
 
 				buttons( false );
 				$progress.prop( 'hidden', false );
-				$( '#sbsk-progress-thumb' ).empty();
 				$( '#sbsk-progress-log' ).empty();
 				$bar.css( 'width', '0%' );
 				$status.text( 'Clearing...' );
+				startClock();
 
 				clearOrphans( 0, 0, 0 );
 			} );

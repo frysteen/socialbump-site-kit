@@ -167,15 +167,17 @@ class SBSK_Images_Cleaner {
 
 		// Everything below is filled in once the scan has run.
 		echo '<div class="sbsk-report__panel" id="sbsk-report" hidden></div>';
+		// No thumbnail column: each row in the log carries its own image, and the
+		// empty column only left a gap down the left of everything.
 		echo '<div class="sbsk-progress" id="sbsk-progress" hidden>';
 		echo '<button type="button" class="sbsk-progress__close" id="sbsk-progress-close" aria-label="' . esc_attr__( 'Hide progress', 'sb-site-kit' ) . '">&times;</button>';
-		echo '<div class="sbsk-progress__row">';
-		echo '<div class="sbsk-progress__thumb" id="sbsk-progress-thumb"></div>';
-		echo '<div class="sbsk-progress__main">';
+		echo '<button type="button" class="sbsk-progress__cancel" id="sbsk-progress-cancel" hidden>' . esc_html__( 'Cancel', 'sb-site-kit' ) . '</button>';
 		echo '<div class="sbsk-rebuild__bar" id="sbsk-rebuild-bar"><span></span></div>';
+		echo '<div class="sbsk-progress__line">';
 		echo '<p class="sbsk-rebuild__status" role="status"></p>';
+		echo '<p class="sbsk-progress__timer" id="sbsk-progress-timer"></p>';
+		echo '</div>';
 		echo '<ul class="sbsk-progress__log" id="sbsk-progress-log"></ul>';
-		echo '</div></div>';
 		echo '</div>';
 
 		echo '<div class="sbsk-rebuild__actions">';

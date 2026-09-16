@@ -192,32 +192,24 @@ class SBSK_Images_Tools {
 				$removed += count( $result['removed'] );
 				$files   += (int) $result['files'];
 
+				if ( $result['removed'] ) {
+					$items[] = self::log_item( $id, $result['removed'], [] );
+				}
+
 				continue;
 			}
 
 			if ( $force ) {
 				$made   = SBSK_Images_Rebuild::rebuild( $id, $chosen );
-			$built += count( $made );
-
-			$items[] = [
-				'name'  => basename( (string) get_attached_file( $id ) ),
-				'thumb' => self::preview( $id ),
-				'sizes' => $made,
-			];
+				$built += count( $made );
+				$items[] = self::log_item( $id, $made, array_diff( $chosen, $made ) );
 
 				continue;
 			}
 
 			$made   = SBSK_Images_Rebuild::build( $id, true, $chosen );
 			$built += count( $made );
-
-			if ( $made ) {
-				$items[] = [
-					'name'  => basename( (string) get_attached_file( $id ) ),
-					'thumb' => self::preview( $id ),
-					'sizes' => $made,
-				];
-			}
+			$items[] = self::log_item( $id, $made, [] );
 		}
 
 		if ( count( $ids ) < $size ) {
@@ -257,6 +249,80 @@ class SBSK_Images_Tools {
 
 		wp_send_json_success( [ 'kept' => $keep ] );
 	}
+	/**
+	 * One row for the progress log: the file, its original dimensions, the sizes
+	 * made, and any that were asked for but skipped.
+	 *
+	 * A size wider than the original is not made, because upscaling only costs
+	 * disk. That used to show as an image with nothing under it, which read like
+	 * a failure, so the reason is named instead and the dimensions are there to
+	 * make it obvious.
+	 */
+	public static function log_item( $id, array $made, array $skipped ) {
+		$meta   = (array) wp_get_attachment_metadata( $id );
+		$sizes  = SBSK_Images_Rebuild::all_wanted();
+		$width  = isset( $meta['width'] ) ? (int) $meta['width'] : 0;
+		$height = isset( $meta['height'] ) ? (int) $meta['height'] : 0;
+		$notes  = [];
+
+		foreach ( $skipped as $name ) {
+			if ( ! isset( $sizes[ $name ] ) ) {
+				continue;
+			}
+
+			$notes[] = [
+				'name' => $name,
+				'why'  => __( 'skipped', 'sb-site-kit' ) . ', ' . self::skip_reason( $width, $height, $sizes[ $name ] ),
+			];
+		}
+
+		return [
+			'name'    => basename( (string) get_attached_file( $id ) ),
+			'thumb'   => self::preview( $id ),
+			'dims'    => ( $width && ! empty( $meta['height'] ) ) ? $width . ' x ' . (int) $meta['height'] . ' px' : '',
+			'sizes'   => array_values( $made ),
+			'skipped' => $notes,
+		];
+	}
+
+	/**
+	 * Why a size was not made for an image, given the original's dimensions.
+	 *
+	 * A cropped size needs the original to be at least that big in both
+	 * directions. An uncropped size is a box to fit inside, so the height is a
+	 * maximum, not a requirement: a 1920 x 1280 original needs no 1920 x 1920
+	 * large, because it already fits, and saying the image is smaller there was
+	 * wrong and confusing.
+	 */
+	public static function skip_reason( $width, $height, array $size ) {
+		$want_w = (int) $size['width'];
+		$want_h = (int) $size['height'];
+		$crop   = ! empty( $size['crop'] );
+
+		if ( ! $width || ! $height || ! $want_w ) {
+			return __( 'not needed', 'sb-site-kit' );
+		}
+
+		if ( $crop ) {
+			return ( $width < $want_w || ( $want_h && $height < $want_h ) )
+				? __( 'image is smaller', 'sb-site-kit' )
+				: __( 'not needed', 'sb-site-kit' );
+		}
+
+		// Bigger than the box in either direction, so it would have been made and
+		// something else stopped it. Better to say nothing than to guess wrongly.
+		if ( $width > $want_w || ( $want_h && $want_h < 9999 && $height > $want_h ) ) {
+			return __( 'not needed', 'sb-site-kit' );
+		}
+
+		// Already at one of the edges of the box, so scaling would change nothing.
+		if ( $width === $want_w || ( $want_h && $want_h < 9999 && $height === $want_h ) ) {
+			return __( 'already this size', 'sb-site-kit' );
+		}
+
+		return __( 'image is smaller', 'sb-site-kit' );
+	}
+
 	/** A small preview of an image, for the progress panel. */
 	public static function preview( $id ) {
 		$url = wp_get_attachment_image_url( $id, 'thumbnail' );
@@ -522,8 +588,11 @@ class SBSK_Images_Tools {
 		// Listed is not the same as there. A size whose file has gone still has its
 		// metadata entry, and saying the dimensions here would be a lie.
 		$present = SBSK_Images_Rebuild::present( $id, $meta );
+		$all     = SBSK_Images_Rebuild::all_wanted();
+		$width   = isset( $meta['width'] ) ? (int) $meta['width'] : 0;
+		$height  = isset( $meta['height'] ) ? (int) $meta['height'] : 0;
 
-		foreach ( array_keys( SBSK_Images_Rebuild::all_wanted() ) as $name ) {
+		foreach ( array_keys( $all ) as $name ) {
 
 			if ( isset( $have[ $name ] ) && in_array( $name, $present, true ) ) {
 				$state = (int) $have[ $name ]['width'] . ' x ' . (int) $have[ $name ]['height'];
@@ -532,8 +601,18 @@ class SBSK_Images_Tools {
 				$state = __( 'missing', 'sb-site-kit' );
 				$class = 'is-missing';
 			} else {
-				$state = __( 'not needed', 'sb-site-kit' );
-				$class = 'is-skipped';
+				// Not needed covers three different things, and which one it is is the
+				// only useful part: too small, already that size, or nothing to do.
+				$want_w = (int) $all[ $name ]['width'];
+				$want_h = (int) $all[ $name ]['height'];
+				$state  = self::skip_reason( $width, $height, $all[ $name ] );
+				$class  = 'is-skipped';
+
+				// The size it would have been, so the reason is obvious beside it.
+				if ( $want_w ) {
+					$asked = $want_w . ' x ' . ( ( $want_h && $want_h < 9999 ) ? $want_h : 'auto' );
+					$state = $asked . ' <em>' . $state . '</em>';
+				}
 			}
 
 			// The name opens that size, when there is a file behind it to open.
@@ -547,7 +626,8 @@ class SBSK_Images_Tools {
 				}
 			}
 
-			$rows .= '<li class="' . esc_attr( $class ) . '"><span>' . $label . '</span><span>' . esc_html( $state ) . '</span></li>';
+			// $state carries its own markup for a skipped row, and is built here.
+			$rows .= '<li class="' . esc_attr( $class ) . '"><span>' . $label . '</span><span>' . ( $class === 'is-skipped' ? wp_kses( $state, [ 'em' => [] ] ) : esc_html( $state ) ) . '</span></li>';
 		}
 
 		return '<ul class="sbsk-sizes">' . $rows . '</ul>';

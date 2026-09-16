@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.9
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,11 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.0 =
+* The progress box now shows how long a run has been going and the average time per image, and keeps both in the finished line. A Cancel button stops a run cleanly, and the empty space down the left of the box is gone.
+* The progress list now keeps every image from the run instead of the last twenty, shows each image's original dimensions, and says when a size was skipped because the image is smaller than it.
+* The sizes panel on an image in the media library now says why a size was not made, and what size it would have been, instead of just not needed.
+
 = 1.0.9 =
 * Long size names on the Image Cleaner page no longer overflow their box; the pixel size drops to its own line. The size rows are striped to be easier to read.
 

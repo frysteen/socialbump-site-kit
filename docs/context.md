@@ -203,6 +203,36 @@ woocommerce_gallery_thumbnail pushes its pixels down to their own line, right
 aligned, rather than out of the box. Rows are striped, every other one on a faint
 grey, purely to be easier to read down a long list.
 
+The progress box carries a clock on the right: how long the run has been going,
+and the average per image, which is the half worth reading because it says
+whether a large library means two minutes or twenty. Both are repeated in the
+finished line. Cancel sits where the close cross goes, and they swap: Cancel
+while it runs, the cross once it has stopped. Cancelling lets the batch in
+flight finish and asks for nothing after it, so nothing is half written; the
+line then reads Stopped rather than Finished. There is no thumbnail column any
+more: each row in the log carries its own image, and the column only left a gap
+down the left of everything.
+
+The log keeps every image of the run rather than the last twenty, and the box
+scrolls. Each row carries the file name, the original dimensions under it, the
+sizes made, and any size that was asked for and not made, which says why. All of it used to
+show as an image with nothing under it, reading like a failure.
+
+skip_reason() works out the wording, and the cropped and uncropped cases are not
+the same. A cropped size needs the original to be at least that big in both
+directions, so a wide but short original fails on the height. An uncropped size
+is a box to fit inside, so its height is a maximum, not a requirement: a
+1920 x 1280 original needs no 1920 x 1920 large because it already fits, and
+calling that image is smaller was simply wrong. The wordings are: already this
+size when the original sits on an edge of the box, image is smaller when it fits
+inside with room to spare, and not needed when it is bigger than the box, which
+means something other than the dimensions stopped it and guessing would lie.
+
+The sizes panel on an attachment says the same three things. A row that is not
+there now gives the size it would have been and why it was not made, rather than
+a bare not needed, which covered all three reasons at once and told you nothing. A clean
+logs its rows too. log_item() in the tools class builds all of it.
+
 #### How the engine and the tools keep their cost down
 
 - make_sizes() decodes an image once and makes every wanted size from it with
