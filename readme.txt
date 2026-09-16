@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.2
+Stable tag: 1.1.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,17 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.3 =
+* The Sizes to build figure on the Image Cleaner page can now be clicked to see exactly which images are missing sizes, with a Rebuild link for a whole image or for one size at a time.
+* Fixed the scan not reporting old thumbnails after you remove an image size. Removing a width now correctly shows its leftover files under Old thumbnails to clear.
+* Turning the Image sizes feature off now correctly lists all of its thumbnails under Old thumbnails to clear, so they can be removed.
+* Remove old sizes is now a red outlined button, like Delete orphan images, so the two buttons that delete files look like it.
+* New Deep scan on the Image Cleaner page. It looks at the actual files in your uploads folder and finds thumbnails whose dimensions no current image size would make, which is how leftovers from an old theme or a removed plugin end up sitting there forever. Results are grouped by size so you can see what they are, and nothing is deleted until you tick a group and confirm.
+* Each group in the deep scan opens to show the actual files, with a thumbnail and a link to open each one, so you can see what you are about to delete.
+* The deep scan is now called Find leftover thumbnails, sits beside Scan images, and its results carry a clear heading and instruction.
+* The leftover thumbnails results can be closed, and running a normal scan clears them rather than leaving the old list on screen.
+* Deleting leftover thumbnails now runs in batches with a progress count, so a large clean up cannot time out. Files that are left alone are listed with the reason. Records kept by image optimisers such as WPvivid no longer count as the file being in use.
+
 = 1.1.2 =
 * A forced rebuild no longer skips sizes on tall images that a normal build would have made, such as the 1536 size on a portrait photo.
 * The list of sizes under each image in the progress panel is now in size order, with the ones that were skipped in their right place rather than all at the end.

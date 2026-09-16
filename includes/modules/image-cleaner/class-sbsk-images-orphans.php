@@ -299,6 +299,269 @@ class SBSK_Images_Orphans {
 	 * Useful on the report: knowing a stray belongs to an attachment still in the
 	 * library is the difference between deleting it and leaving it alone.
 	 */
+	/**
+	 * Size files on disk that nothing registers any more.
+	 *
+	 * The orphan scan gives a free pass to any file whose name matches a real
+	 * attachment, so that a WebP sibling or a thumbnail missing from its
+	 * metadata is never deleted. The cost is that an old theme's
+	 * photo-1300x200 is invisible: not an orphan, because it looks like it
+	 * belongs, and not a removed size, because it was never in the metadata at
+	 * all. This is the third check, and it works from the disk.
+	 *
+	 * A file counts as unaccounted when its name carries a WxH, its base is a
+	 * real attachment, nothing in the database names it, and those dimensions
+	 * are not what any size registered right now would produce for that
+	 * attachment. That last test keeps a valid thumbnail whose metadata went
+	 * missing out of the list: it would be rebuilt at those exact dimensions,
+	 * so it is left alone.
+	 */
+	public static function unaccounted() {
+		$known  = self::known();
+		$expect = self::expected_dimensions();
+		$files  = [];
+		$groups = [];
+		$bytes  = 0;
+
+		foreach ( self::folders() as $folder ) {
+			foreach ( (array) glob( $folder . '/*' ) as $path ) {
+				if ( ! is_file( $path ) || isset( $known[ $path ] ) || self::is_protected( $path ) || ! self::is_image_file( $path ) ) {
+					continue;
+				}
+
+				$name = pathinfo( $path, PATHINFO_FILENAME );
+				$name = preg_replace( '/\.[a-z0-9]+$/i', '', $name );
+
+				if ( ! preg_match( '/^(.*)-(\d+)x(\d+)$/', $name, $bits ) ) {
+					continue;
+				}
+
+				$base = strtolower( preg_replace( '/-scaled$/', '', $bits[1] ) );
+				$dims = (int) $bits[2] . 'x' . (int) $bits[3];
+
+				// Only beside a real attachment. A file with no owner at all is an
+				// orphan, and the other scan has it.
+				if ( ! isset( $expect[ $base ] ) || isset( $expect[ $base ][ $dims ] ) ) {
+					continue;
+				}
+
+				$size   = (int) filesize( $path );
+				$bytes += $size;
+
+				$files[] = [ 'path' => $path, 'bytes' => $size, 'dims' => $dims ];
+
+				if ( ! isset( $groups[ $dims ] ) ) {
+					$groups[ $dims ] = [ 'dims' => $dims, 'count' => 0, 'bytes' => 0 ];
+				}
+
+				$groups[ $dims ]['count']++;
+				$groups[ $dims ]['bytes'] += $size;
+			}
+		}
+
+		uasort(
+			$groups,
+			function ( $a, $b ) {
+				return $b['bytes'] <=> $a['bytes'];
+			}
+		);
+
+		return [ 'files' => $files, 'bytes' => $bytes, 'groups' => array_values( $groups ) ];
+	}
+
+	/**
+	 * Per attachment base name, the dimensions every registered size would
+	 * produce from that original. Pure arithmetic, no files touched.
+	 */
+	private static function expected_dimensions() {
+		global $wpdb;
+
+		$sizes  = SBSK_Images_Rebuild::all_wanted();
+		$expect = [];
+
+		$rows = $wpdb->get_results( "SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attachment_metadata'" );
+
+		foreach ( $rows as $row ) {
+			$meta = maybe_unserialize( $row->meta_value );
+
+			if ( ! is_array( $meta ) || empty( $meta['file'] ) ) {
+				continue;
+			}
+
+			$name   = pathinfo( $meta['file'], PATHINFO_FILENAME );
+			$name   = strtolower( preg_replace( '/-scaled$/', '', $name ) );
+			$width  = isset( $meta['width'] ) ? (int) $meta['width'] : 0;
+			$height = isset( $meta['height'] ) ? (int) $meta['height'] : 0;
+
+			if ( $name === '' ) {
+				continue;
+			}
+
+			if ( ! isset( $expect[ $name ] ) ) {
+				$expect[ $name ] = [];
+			}
+
+			// The original itself, which can carry its own dimensions in the name.
+			if ( $width && $height ) {
+				$expect[ $name ][ $width . 'x' . $height ] = true;
+			}
+
+			foreach ( $sizes as $size ) {
+				$dims = image_resize_dimensions( $width, $height, (int) $size['width'], (int) $size['height'], ! empty( $size['crop'] ) );
+
+				if ( $dims ) {
+					$expect[ $name ][ (int) $dims[4] . 'x' . (int) $dims[5] ] = true;
+				}
+			}
+		}
+
+		return $expect;
+	}
+
+	/**
+	 * references() for a batch, in three queries instead of three per file.
+	 *
+	 * The three LIKE scans are unindexed, so on a big library one per file is
+	 * the slow part of a deletion. One scan per table with the names OR'd
+	 * together finds every row that mentions any of them, and the rows are
+	 * sorted to their names in PHP. Returns name => labels, only for names that
+	 * are mentioned somewhere.
+	 */
+	public static function references_many( array $paths ) {
+		global $wpdb;
+
+		$names = [];
+
+		foreach ( $paths as $path ) {
+			$names[ basename( $path ) ] = true;
+		}
+
+		$names = array_keys( $names );
+		$found = [];
+
+		if ( ! $names ) {
+			return $found;
+		}
+
+		$likes = [];
+		$args  = [];
+
+		foreach ( $names as $name ) {
+			$likes[] = '%s';
+			$args[]  = '%' . $wpdb->esc_like( $name ) . '%';
+		}
+
+		$attach = function ( $rows, $field, $label_from ) use ( $names, &$found ) {
+			foreach ( $rows as $row ) {
+				foreach ( $names as $name ) {
+					if ( strpos( $row->$field, $name ) === false ) {
+						continue;
+					}
+
+					$label = $label_from( $row );
+
+					if ( ! isset( $found[ $name ] ) || ! in_array( $label, $found[ $name ], true ) ) {
+						$found[ $name ][] = $label;
+					}
+				}
+			}
+		};
+
+		$where = 'post_content LIKE ' . implode( ' OR post_content LIKE ', $likes );
+		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_title, post_type, post_content FROM {$wpdb->posts} WHERE ( {$where} ) AND post_type <> 'revision' LIMIT 500", $args ) );
+
+		$attach( $rows, 'post_content', function ( $row ) {
+			return sprintf( '%s (%s)', $row->post_title !== '' ? $row->post_title : ( '#' . $row->ID ), $row->post_type );
+		} );
+
+		$skip  = array_merge( [ '_wp_attachment_metadata' ], self::bookkeeping_keys() );
+		$hold  = implode( ',', array_fill( 0, count( $skip ), '%s' ) );
+		$where = 'm.meta_value LIKE ' . implode( ' OR m.meta_value LIKE ', $likes );
+		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, p.post_title, p.post_type, m.meta_value FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE ( {$where} ) AND p.post_type <> 'revision' AND m.meta_key NOT IN ( {$hold} ) LIMIT 500", array_merge( $args, $skip ) ) );
+
+		$attach( $rows, 'meta_value', function ( $row ) {
+			return sprintf( '%s (%s)', $row->post_title !== '' ? $row->post_title : ( '#' . $row->ID ), $row->post_type );
+		} );
+
+		$where = 'option_value LIKE ' . implode( ' OR option_value LIKE ', $likes );
+		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE ( {$where} ) AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' LIMIT 200", $args ) );
+
+		$attach( $rows, 'option_value', function ( $row ) {
+			return sprintf( '%s (setting)', $row->option_name );
+		} );
+
+		return $found;
+	}
+
+	/**
+	 * Delete unaccounted files, checking each one again first.
+	 *
+	 * The list can be minutes old and a plugin may have been switched back on
+	 * since, so nothing is taken on trust from the browser. $current is the
+	 * list from unaccounted() if the caller already has it, to save a second
+	 * walk of the uploads folder. Anything left alone comes back with the
+	 * reason, so it can be shown rather than silently vanish from the count.
+	 */
+	public static function remove_unaccounted( array $paths, array $current = null ) {
+		if ( $current === null ) {
+			$current = self::unaccounted()['files'];
+		}
+
+		$live = [];
+
+		foreach ( $current as $file ) {
+			$live[ wp_normalize_path( $file['path'] ) ] = true;
+		}
+
+		$removed = 0;
+		$bytes   = 0;
+		$skipped = [];
+		$check   = [];
+
+		foreach ( $paths as $path ) {
+			$path = wp_normalize_path( (string) $path );
+
+			if ( ! isset( $live[ $path ] ) || ! is_file( $path ) ) {
+				$skipped[] = [ 'name' => basename( $path ), 'why' => __( 'no longer unaccounted for', 'sb-site-kit' ) ];
+
+				continue;
+			}
+
+			if ( self::is_kept( $path ) ) {
+				$skipped[] = [ 'name' => basename( $path ), 'why' => __( 'marked as kept', 'sb-site-kit' ) ];
+
+				continue;
+			}
+
+			$check[] = $path;
+		}
+
+		// One pass of queries for the lot, not three per file.
+		$used = [];
+
+		foreach ( array_chunk( $check, 50 ) as $chunk ) {
+			$used += self::references_many( $chunk );
+		}
+
+		foreach ( $check as $path ) {
+			$name = basename( $path );
+
+			if ( ! empty( $used[ $name ] ) ) {
+				$skipped[] = [ 'name' => $name, 'why' => sprintf( __( 'in use: %s', 'sb-site-kit' ), implode( ', ', $used[ $name ] ) ) ];
+
+				continue;
+			}
+
+			$bytes += (int) filesize( $path );
+
+			wp_delete_file( $path );
+
+			$removed++;
+		}
+
+		return [ 'removed' => $removed, 'skipped' => $skipped, 'bytes' => $bytes ];
+	}
+
 	public static function attachment_for( $path ) {
 		global $wpdb;
 
@@ -345,12 +608,20 @@ class SBSK_Images_Orphans {
 		return $id > 0 ? [ 'id' => $id, 'title' => get_the_title( $id ) ] : null;
 	}
 	/**
-	 * Where a file is mentioned, if anywhere.
+	 * Meta keys that mention files without using them.
 	 *
-	 * A file with no attachment behind it can still be in use: a page built before
-	 * the attachment was deleted, a setting, a template. Anything found here is
-	 * kept out of the bulk delete and shown with the place it turned up.
+	 * Image optimisers keep a record of what they have compressed and where the
+	 * backup went. That is bookkeeping about a file, not a use of it, and it
+	 * stopped a plainly stale thumbnail from being deleted because WPvivid still
+	 * had it on its books.
 	 */
+	public static function bookkeeping_keys() {
+		return (array) apply_filters(
+			'sbsk/orphans/bookkeeping_keys',
+			[ 'wpvivid_backup_image_meta', 'wpvivid_image_optimization_meta', '_wpvivid_image_optimization', 'imagify_data', '_imagify_data', '_shortpixel_meta', 'shortpixel_meta', 'ewww_image_optimizer', '_ewww_image_optimizer', 'wp-smpro-smush-data', 'wp-smush-lossy' ]
+		);
+	}
+
 	public static function references( $path ) {
 		global $wpdb;
 
@@ -369,10 +640,13 @@ class SBSK_Images_Orphans {
 			$found[] = sprintf( '%s (%s)', $post->post_title !== '' ? $post->post_title : ( '#' . $post->ID ), $post->post_type );
 		}
 
+		$skip = array_merge( [ '_wp_attachment_metadata' ], self::bookkeeping_keys() );
+		$hold = implode( ',', array_fill( 0, count( $skip ), '%s' ) );
+
 		$meta = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT p.ID, p.post_title, p.post_type FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE m.meta_value LIKE %s AND p.post_type <> 'revision' AND m.meta_key <> '_wp_attachment_metadata' LIMIT 3",
-				$like
+				"SELECT p.ID, p.post_title, p.post_type FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE m.meta_value LIKE %s AND p.post_type <> 'revision' AND m.meta_key NOT IN ( {$hold} ) LIMIT 3",
+				array_merge( [ $like ], $skip )
 			)
 		);
 

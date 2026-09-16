@@ -20,6 +20,9 @@ class SBSK_Images_Tools {
 		add_action( 'wp_ajax_sbsk_images_batch', [ __CLASS__, 'ajax_batch' ] );
 		add_action( 'wp_ajax_sbsk_images_single', [ __CLASS__, 'ajax_single' ] );
 		add_action( 'wp_ajax_sbsk_images_panel', [ __CLASS__, 'ajax_panel' ] );
+		add_action( 'wp_ajax_sbsk_images_fix', [ __CLASS__, 'ajax_fix' ] );
+		add_action( 'wp_ajax_sbsk_images_deep', [ __CLASS__, 'ajax_deep' ] );
+		add_action( 'wp_ajax_sbsk_images_deep_remove', [ __CLASS__, 'ajax_deep_remove' ] );
 		add_action( 'wp_ajax_sbsk_images_report', [ __CLASS__, 'ajax_report' ] );
 		add_action( 'wp_ajax_sbsk_images_orphans', [ __CLASS__, 'ajax_orphans' ] );
 		add_action( 'wp_ajax_sbsk_images_orphan_one', [ __CLASS__, 'ajax_orphan_one' ] );
@@ -105,6 +108,9 @@ class SBSK_Images_Tools {
 	 * One pass over the library. The per size totals the report needs are
 	 * gathered on the same pass, so the report no longer walks it a second time.
 	 */
+	/** How many images the missing list shows before it stops collecting. */
+	const LIST_CAP = 100;
+
 	public static function summary() {
 		$ids         = self::ids();
 		$only        = SBSK_Images_Cleaner::chosen();
@@ -114,21 +120,29 @@ class SBSK_Images_Tools {
 		$stale_sizes = 0;
 		$stale_files = 0;
 		$stale_names = [];
+		$rows        = [];
 
 		foreach ( $ids as $id ) {
 			$meta   = (array) wp_get_attachment_metadata( $id );
 			$absent = SBSK_Images_Rebuild::missing_all( $id, $meta, $only );
-			$names  = SBSK_Images_Rebuild::stale( $id, $meta, $only );
+			$names  = SBSK_Images_Rebuild::stale( $id, $meta );
 
 			if ( $absent ) {
 				$missing++;
 				$sizes += count( $absent );
+
+				// Which images, for the list behind the Sizes to build figure. Capped,
+				// because adding a width makes every image in the library missing it
+				// and nobody reads six hundred rows.
+				if ( count( $rows ) < self::LIST_CAP ) {
+					$rows[] = [ 'id' => (int) $id, 'names' => array_values( $absent ) ];
+				}
 			}
 
 			if ( $names ) {
 				$stale++;
 				$stale_sizes += count( $names );
-				$stale_files += SBSK_Images_Rebuild::stale_files( $id, $meta, $only );
+				$stale_files += SBSK_Images_Rebuild::stale_files( $id, $meta );
 
 				foreach ( $names as $name ) {
 					$stale_names[ $name ] = true;
@@ -148,6 +162,7 @@ class SBSK_Images_Tools {
 			'stale_sizes' => $stale_sizes,
 			'stale_files' => $stale_files,
 			'stale_names' => array_keys( $stale_names ),
+			'rows'        => $rows,
 		];
 	}
 
@@ -188,7 +203,7 @@ class SBSK_Images_Tools {
 			$last = $id;
 
 			if ( $mode === 'clean' ) {
-				$result   = SBSK_Images_Rebuild::clean( $id, $chosen );
+				$result   = SBSK_Images_Rebuild::clean( $id );
 				$removed += count( $result['removed'] );
 				$files   += (int) $result['files'];
 
@@ -235,6 +250,55 @@ class SBSK_Images_Tools {
 		);
 	}
 
+
+	/**
+	 * The images missing a size, one row each, with the sizes under them.
+	 *
+	 * Hidden until the Sizes to build figure is clicked. Rebuild by the name does
+	 * the whole image; Rebuild by a size does that one.
+	 */
+	public static function missing_list( array $summary ) {
+		if ( empty( $summary['rows'] ) ) {
+			return '';
+		}
+
+		$html = '<div class="sbsk-missing" id="sbsk-missing" hidden>';
+		$html .= '<ul class="sbsk-progress__log sbsk-missing__log">';
+
+		foreach ( $summary['rows'] as $row ) {
+			$id    = (int) $row['id'];
+			$meta  = (array) wp_get_attachment_metadata( $id );
+			$thumb = self::preview( $id );
+			$dims  = ( ! empty( $meta['width'] ) && ! empty( $meta['height'] ) ) ? (int) $meta['width'] . ' x ' . (int) $meta['height'] . ' px' : '';
+
+			$html .= '<li class="sbsk-log__row sbsk-missing__row" data-id="' . esc_attr( $id ) . '">';
+			$html .= $thumb ? '<img class="sbsk-log__thumb" src="' . esc_url( $thumb ) . '" alt="">' : '<span class="sbsk-log__thumb is-empty"></span>';
+			$html .= '<div class="sbsk-log__detail">';
+			$html .= '<strong>' . esc_html( basename( (string) get_attached_file( $id ) ) ) . '</strong>';
+			$html .= ' <button type="button" class="button-link sbsk-fix" data-id="' . esc_attr( $id ) . '">' . esc_html__( 'Rebuild', 'sb-site-kit' ) . '</button>';
+
+			if ( $dims !== '' ) {
+				$html .= '<span class="sbsk-log__dims">' . esc_html( $dims ) . '</span>';
+			}
+
+			$html .= '<ul>';
+
+			foreach ( $row['names'] as $name ) {
+				$html .= '<li data-size="' . esc_attr( $name ) . '"><span class="sbsk-tick sbsk-tick--skip">&#10005;</span>' . esc_html( $name );
+				$html .= ' <button type="button" class="button-link sbsk-fix" data-id="' . esc_attr( $id ) . '" data-size="' . esc_attr( $name ) . '">' . esc_html__( 'Rebuild', 'sb-site-kit' ) . '</button></li>';
+			}
+
+			$html .= '</ul></div></li>';
+		}
+
+		$html .= '</ul>';
+
+		if ( $summary['missing'] > count( $summary['rows'] ) ) {
+			$html .= '<p class="sbsk-missing__note">' . esc_html( sprintf( __( 'Showing the first %1$s of %2$s images. Build Thumbnails covers them all.', 'sb-site-kit' ), number_format_i18n( count( $summary['rows'] ) ), number_format_i18n( $summary['missing'] ) ) ) . '</p>';
+		}
+
+		return $html . '</div>';
+	}
 
 	/** Mark a file as worth keeping, or stop keeping it. */
 	public static function ajax_keep() {
@@ -366,6 +430,217 @@ class SBSK_Images_Tools {
 		wp_send_json_success( [ 'html' => self::sizes_list( $id ) ] );
 	}
 
+	/**
+	 * Build the missing sizes for one image, or just the size named.
+	 *
+	 * Behind the Rebuild links in the missing list. Returns what was made and
+	 * what is still missing, so the row can update itself or disappear.
+	 */
+	/**
+	 * Deep scan: size files on disk that nothing registers any more.
+	 *
+	 * Reported by dimensions rather than by image, because that is the shape you
+	 * can judge. Seeing 1024 x 750, 412 files, 180 MB tells you it is the old
+	 * WordPress large, where 412 separate file names would not.
+	 */
+	public static function ajax_deep() {
+		self::guard();
+
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 180 );
+		}
+
+		require_once __DIR__ . '/class-sbsk-images-orphans.php';
+
+		$found = SBSK_Images_Orphans::unaccounted();
+
+		wp_send_json_success(
+			[
+				'count' => count( $found['files'] ),
+				'bytes' => (int) $found['bytes'],
+				'html'  => self::deep_list( $found ),
+			]
+		);
+	}
+
+	/** How many leftover files one deletion request handles. */
+	const DEEP_BATCH = 100;
+
+	/**
+	 * Delete the files in the dimension groups that were ticked, a batch at a
+	 * time. The browser calls this until done comes back true. Each call walks
+	 * the uploads folder afresh, which is cheap, so files deleted or protected
+	 * since the last call are never acted on twice; skipped files stay in the
+	 * list, so the offset steps past them.
+	 */
+	public static function ajax_deep_remove() {
+		self::guard();
+
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 120 );
+		}
+
+		require_once __DIR__ . '/class-sbsk-images-orphans.php';
+
+		$dims   = isset( $_POST['dims'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['dims'] ) ) : [];
+		$offset = isset( $_POST['offset'] ) ? max( 0, (int) $_POST['offset'] ) : 0;
+
+		if ( ! $dims ) {
+			wp_send_json_error( [ 'message' => __( 'Nothing was ticked.', 'sb-site-kit' ) ], 400 );
+		}
+
+		$found = SBSK_Images_Orphans::unaccounted();
+		$paths = [];
+
+		foreach ( $found['files'] as $file ) {
+			if ( in_array( $file['dims'], $dims, true ) ) {
+				$paths[] = $file['path'];
+			}
+		}
+
+		$total = count( $paths );
+		$batch = array_slice( $paths, $offset, self::DEEP_BATCH );
+
+		if ( ! $batch ) {
+			wp_send_json_success( [ 'removed' => 0, 'skipped' => [], 'bytes' => 0, 'offset' => $offset, 'total' => $total, 'done' => true, 'html' => self::deep_list( $found ) ] );
+		}
+
+		$result = SBSK_Images_Orphans::remove_unaccounted( $batch, $found['files'] );
+		$done   = count( $batch ) < self::DEEP_BATCH;
+
+		wp_send_json_success(
+			[
+				'removed' => (int) $result['removed'],
+				'skipped' => $result['skipped'],
+				'bytes'   => (int) $result['bytes'],
+				// Deleted files drop out of the list, skipped ones do not, so the
+				// next slice starts past whatever was skipped.
+				'offset'  => $offset + count( $result['skipped'] ),
+				'total'   => $total,
+				'done'    => $done,
+				'html'    => $done ? self::deep_list( SBSK_Images_Orphans::unaccounted() ) : '',
+			]
+		);
+	}
+
+	/** The note above a refreshed list saying what was left alone and why. */
+	public static function deep_skipped( array $skipped ) {
+		if ( ! $skipped ) {
+			return '';
+		}
+
+		$html = '<div class="sbsk-deep__skipped"><p>' . esc_html( sprintf( _n( '%s file was left alone:', '%s files were left alone:', count( $skipped ), 'sb-site-kit' ), number_format_i18n( count( $skipped ) ) ) ) . '</p><ul>';
+
+		foreach ( array_slice( $skipped, 0, 20 ) as $skip ) {
+			$html .= '<li><code>' . esc_html( $skip['name'] ) . '</code> <span>' . esc_html( $skip['why'] ) . '</span></li>';
+		}
+
+		if ( count( $skipped ) > 20 ) {
+			$html .= '<li class="sbsk-deep__more">' . esc_html( sprintf( __( 'and %s more', 'sb-site-kit' ), number_format_i18n( count( $skipped ) - 20 ) ) ) . '</li>';
+		}
+
+		return $html . '</ul></div>';
+	}
+
+	/** The cross that closes the leftovers panel, same place as the progress one. */
+	private static function deep_close() {
+		return '<button type="button" class="sbsk-deep__close" aria-label="' . esc_attr__( 'Close', 'sb-site-kit' ) . '">&times;</button>';
+	}
+
+	/** The deep scan result: a tickable row per set of dimensions. */
+	public static function deep_list( array $found ) {
+		if ( empty( $found['groups'] ) ) {
+			return self::deep_close() . '<p class="sbsk-deep__none">' . esc_html__( 'Nothing unaccounted for. Every size file on disk matches a size registered right now.', 'sb-site-kit' ) . '</p>';
+		}
+
+		$uploads = wp_upload_dir();
+		$base    = wp_normalize_path( trailingslashit( $uploads['basedir'] ) );
+		$url     = trailingslashit( $uploads['baseurl'] );
+
+		// The files behind each set of dimensions, so a group can be opened and
+		// looked at. Dimensions alone are not enough to judge a deletion by.
+		$by_dims = [];
+
+		foreach ( $found['files'] as $file ) {
+			$by_dims[ $file['dims'] ][] = $file;
+		}
+
+		$html  = self::deep_close();
+		$html .= '<div class="sbsk-deep__head">';
+		$html .= '<h3>' . esc_html__( 'Thumbnail files no longer registered in WordPress', 'sb-site-kit' ) . '</h3>';
+		$html .= '<p>' . esc_html( sprintf( __( '%1$s files, %2$s. Tick the sizes you want to delete from the uploads folder. This cannot be undone.', 'sb-site-kit' ), number_format_i18n( count( $found['files'] ) ), size_format( $found['bytes'] ) ) ) . '</p>';
+
+		// The one way this can bite: a plugin switched off right now registers
+		// nothing, so its sizes look abandoned.
+		$html .= '<p class="sbsk-deep__warn">' . esc_html__( 'A plugin or theme that is switched off right now will show up here too.', 'sb-site-kit' ) . '</p>';
+		$html .= '</div><ul class="sbsk-deep__list">';
+
+		foreach ( $found['groups'] as $group ) {
+			$dims  = $group['dims'];
+			$files = isset( $by_dims[ $dims ] ) ? $by_dims[ $dims ] : [];
+
+			$html .= '<li>';
+			$html .= '<div class="sbsk-deep__row"><label><input type="checkbox" class="sbsk-deep-choice" value="' . esc_attr( $dims ) . '"> ';
+			$html .= '<code>' . esc_html( str_replace( 'x', ' x ', $dims ) ) . '</code> ';
+			$html .= '<span>' . esc_html( sprintf( _n( '%s file', '%s files', $group['count'], 'sb-site-kit' ), number_format_i18n( $group['count'] ) ) ) . ', ' . esc_html( size_format( $group['bytes'] ) ) . '</span></label>';
+			$html .= '<button type="button" class="button-link sbsk-deep-show">' . esc_html__( 'Show files', 'sb-site-kit' ) . '</button>';
+			$html .= '</div>';
+
+			$html .= '<ul class="sbsk-deep__files" hidden>';
+
+			$shown = 0;
+
+			foreach ( $files as $file ) {
+				$shown++;
+
+				if ( $shown > self::LIST_CAP ) {
+					break;
+				}
+
+				$relative = ltrim( str_replace( $base, '', wp_normalize_path( $file['path'] ) ), '/' );
+				$link     = $url . str_replace( '%2F', '/', rawurlencode( $relative ) );
+
+				$html .= '<li><img src="' . esc_url( $link ) . '" alt="" loading="lazy">';
+				$html .= '<a href="' . esc_url( $link ) . '" target="_blank" rel="noopener">' . esc_html( basename( $file['path'] ) ) . '</a>';
+				$html .= '<span>' . esc_html( size_format( $file['bytes'] ) ) . '</span></li>';
+			}
+
+			if ( count( $files ) > self::LIST_CAP ) {
+				$html .= '<li class="sbsk-deep__more">' . esc_html( sprintf( __( 'and %s more', 'sb-site-kit' ), number_format_i18n( count( $files ) - self::LIST_CAP ) ) ) . '</li>';
+			}
+
+			$html .= '</ul></li>';
+		}
+
+		$html .= '</ul>';
+		$html .= '<div class="sbsk-deep__foot">';
+		$html .= '<button type="button" class="button-link" id="sbsk-deep-all">' . esc_html__( 'Select all', 'sb-site-kit' ) . '</button> | ';
+		$html .= '<button type="button" class="button-link" id="sbsk-deep-none">' . esc_html__( 'Select none', 'sb-site-kit' ) . '</button>';
+		$html .= '<button type="button" class="button sbsk-button--danger" id="sbsk-deep-remove" disabled>' . esc_html__( 'Delete ticked files', 'sb-site-kit' ) . '</button>';
+		$html .= '</div>';
+
+		return $html;
+	}
+
+	public static function ajax_fix() {
+		self::guard();
+
+		$id = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
+
+		if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
+			wp_send_json_error( [ 'message' => __( 'Not allowed.', 'sb-site-kit' ) ], 403 );
+		}
+
+		$chosen = SBSK_Images_Cleaner::chosen();
+		$asked  = isset( $_POST['sizes'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['sizes'] ) ) : [];
+		$asked  = array_values( array_intersect( $asked, $chosen ) );
+
+		$made = SBSK_Images_Rebuild::build( $id, true, $asked ? $asked : $chosen );
+		$left = SBSK_Images_Rebuild::missing_all( $id, null, $chosen );
+
+		wp_send_json_success( [ 'made' => array_values( $made ), 'left' => array_values( $left ) ] );
+	}
+
 	public static function ajax_single() {
 		self::guard();
 
@@ -405,7 +680,7 @@ class SBSK_Images_Tools {
 		$base  = trailingslashit( wp_upload_dir()['basedir'] );
 		$stats = [];
 		$stats[] = [ 'label' => __( 'Images with thumbnails', 'sb-site-kit' ), 'value' => number_format_i18n( $summary['total'] ), 'tone' => 'plain', 'note' => $summary['skipped'] ? sprintf( _n( '%s SVG or similar skipped', '%s SVGs and similar skipped', $summary['skipped'], 'sb-site-kit' ), number_format_i18n( $summary['skipped'] ) ) : '' ];
-		$stats[] = [ 'label' => __( 'Sizes to build', 'sb-site-kit' ), 'value' => number_format_i18n( $missing ), 'tone' => $missing ? 'warn' : 'good', 'note' => sprintf( _n( 'across %s image', 'across %s images', $summary['missing'], 'sb-site-kit' ), number_format_i18n( $summary['missing'] ) ) ];
+		$stats[] = [ 'label' => __( 'Sizes to build', 'sb-site-kit' ), 'value' => number_format_i18n( $missing ), 'tone' => $missing ? 'warn' : 'good', 'note' => sprintf( _n( 'across %s image', 'across %s images', $summary['missing'], 'sb-site-kit' ), number_format_i18n( $summary['missing'] ) ), 'opens' => $missing ? 'sbsk-missing' : '' ];
 		$stats[] = [ 'label' => __( 'Old thumbnails to clear', 'sb-site-kit' ), 'value' => number_format_i18n( $stale_files ), 'tone' => $stale_files ? 'warn' : 'good', 'note' => sprintf( __( '%1$s across %2$s', 'sb-site-kit' ), sprintf( _n( '%s removed size', '%s removed sizes', count( $stale_names ), 'sb-site-kit' ), number_format_i18n( count( $stale_names ) ) ), sprintf( _n( '%s image', '%s images', $summary['stale'], 'sb-site-kit' ), number_format_i18n( $summary['stale'] ) ) ) ];
 		$deletable = 0;
 		$held      = 0;
@@ -439,7 +714,12 @@ class SBSK_Images_Tools {
 		$html = '<div class="sbsk-stats">';
 
 		foreach ( $stats as $stat ) {
-			$html .= '<div class="sbsk-stat is-' . esc_attr( $stat['tone'] ) . '">';
+			// A figure with a list behind it is a button, so it can be opened from the
+			// keyboard as well as clicked.
+			$opens = ! empty( $stat['opens'] );
+			$tag   = $opens ? 'button' : 'div';
+
+			$html .= '<' . $tag . ' class="sbsk-stat is-' . esc_attr( $stat['tone'] ) . ( $opens ? ' is-openable' : '' ) . '"' . ( $opens ? ' type="button" data-opens="' . esc_attr( $stat['opens'] ) . '"' : '' ) . '>';
 			$html .= '<span class="sbsk-stat__value">' . esc_html( $stat['value'] ) . '</span>';
 			$html .= '<span class="sbsk-stat__label">' . esc_html( $stat['label'] ) . '</span>';
 
@@ -447,10 +727,15 @@ class SBSK_Images_Tools {
 				$html .= '<span class="sbsk-stat__note">' . esc_html( $stat['note'] ) . '</span>';
 			}
 
-			$html .= '</div>';
+			if ( $opens ) {
+				$html .= '<span class="sbsk-stat__more">' . esc_html__( 'Show images', 'sb-site-kit' ) . '</span>';
+			}
+
+			$html .= '</' . $tag . '>';
 		}
 
 		$html .= '</div>';
+		$html .= self::missing_list( $summary );
 
 		if ( $orphans['files'] ) {
 			$rows = '';

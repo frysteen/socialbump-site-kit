@@ -33,7 +33,19 @@ class SBSK_Images_Rebuild {
 	}
 
 	/** The size names the settings ask for right now. */
+	/**
+	 * The size names the kit currently registers.
+	 *
+	 * Nothing is registered while the Image sizes switch is off, so nothing is
+	 * wanted either, and every image-* file on an attachment becomes a leftover
+	 * to clear. Reading the widths without the switch meant turning the feature
+	 * off left the files in place with the scan reporting nothing to remove.
+	 */
 	public static function wanted() {
+		if ( ! SBSK_Images::setting( 'sizes_on', 1 ) ) {
+			return [];
+		}
+
 		$names = [];
 
 		foreach ( SBSK_Images::widths() as $width ) {
@@ -104,15 +116,19 @@ class SBSK_Images_Rebuild {
 
 	/** Sizes on this attachment that we own but no longer want. */
 	/**
-	 * $only, here and below, narrows the work to those size names: the Image
-	 * Cleaner page lets you tick which sizes to build or clear. Null means all.
+	 * Sizes this attachment still carries that the kit no longer registers.
+	 *
+	 * $only narrows the building work to the sizes ticked on the Image Cleaner
+	 * page, and appears on the build methods below. It deliberately does not
+	 * apply here: a size that has been removed is no longer registered, so it can
+	 * never appear in that list, and filtering by it meant a removed size could
+	 * never be found or cleared at all.
 	 */
-	public static function stale( $id, array $meta = null, array $only = null ) {
-		$meta  = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
-		$have  = array_keys( (array) ( $meta['sizes'] ?? [] ) );
-		$stale = array_values( array_intersect( array_diff( $have, self::wanted() ), self::owned() ) );
+	public static function stale( $id, array $meta = null ) {
+		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
+		$have = array_keys( (array) ( $meta['sizes'] ?? [] ) );
 
-		return $only === null ? $stale : array_values( array_intersect( $stale, $only ) );
+		return array_values( array_intersect( array_diff( $have, self::wanted() ), self::owned() ) );
 	}
 
 	/** Remove a generated file and any WebP written beside it. */
@@ -358,7 +374,7 @@ class SBSK_Images_Rebuild {
 		return $built;
 	}
 	/** Remove sizes we own that are no longer wanted. Nothing is built. */
-	public static function clean( $id, array $only = null ) {
+	public static function clean( $id ) {
 		$result = [ 'removed' => [], 'files' => 0 ];
 
 		if ( ! wp_attachment_is_image( $id ) ) {
@@ -374,7 +390,7 @@ class SBSK_Images_Rebuild {
 
 		$folder = dirname( $file );
 
-		foreach ( self::stale( $id, $meta, $only ) as $name ) {
+		foreach ( self::stale( $id, $meta ) as $name ) {
 			$stale_file = ! empty( $meta['sizes'][ $name ]['file'] ) ? $meta['sizes'][ $name ]['file'] : '';
 
 			// The entry goes either way; the file only goes if nothing else uses it.
@@ -396,7 +412,7 @@ class SBSK_Images_Rebuild {
 	 * The files that clearing would actually delete for one attachment:
 	 * each old thumbnail, plus any WebP copy sitting beside it.
 	 */
-	public static function stale_files( $id, array $meta = null, array $only = null ) {
+	public static function stale_files( $id, array $meta = null ) {
 		$meta  = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 		$file  = get_attached_file( $id );
 		$count = 0;
@@ -407,7 +423,7 @@ class SBSK_Images_Rebuild {
 
 		$folder = dirname( $file );
 
-		foreach ( self::stale( $id, $meta, $only ) as $name ) {
+		foreach ( self::stale( $id, $meta ) as $name ) {
 			if ( empty( $meta['sizes'][ $name ]['file'] ) ) {
 				continue;
 			}

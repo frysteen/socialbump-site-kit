@@ -182,11 +182,20 @@ class SBSK_Images_Cleaner {
 
 		echo '<div class="sbsk-rebuild__actions">';
 		echo '<button type="button" class="button button-primary" id="sbsk-scan">' . esc_html__( 'Scan images', 'sb-site-kit' ) . '</button>';
+		// Next to Scan, not at the end: the buttons between them only appear after a
+		// scan, and the two that start a scan belong together.
+		echo '<button type="button" class="button sbsk-button--deep" id="sbsk-deep">' . esc_html__( 'Find leftover thumbnails', 'sb-site-kit' ) . '</button>';
 		echo '<button type="button" class="button" id="sbsk-rebuild-run" hidden disabled>' . esc_html__( 'Build Thumbnails', 'sb-site-kit' ) . '</button>';
-		echo '<button type="button" class="button" id="sbsk-rebuild-clean" hidden>' . esc_html__( 'Remove old sizes', 'sb-site-kit' ) . '</button>';
+		echo '<button type="button" class="button sbsk-button--danger" id="sbsk-rebuild-clean" hidden>' . esc_html__( 'Remove old sizes', 'sb-site-kit' ) . '</button>';
 		echo '<button type="button" class="button sbsk-button--danger" id="sbsk-orphans-run" hidden>' . esc_html__( 'Delete orphan images', 'sb-site-kit' ) . '</button>';
 		echo '<label class="sbsk-rebuild__force" id="sbsk-force-wrap" hidden><input type="checkbox" id="sbsk-rebuild-force"> ' . esc_html__( 'Force rebuild all thumbnails', 'sb-site-kit' ) . '</label>';
 		echo '</div>';
+
+		// The button names are bold, so the line reads as two instructions.
+		echo '<p class="sbsk-rebuild__help">' . wp_kses( __( '<strong>Scan images</strong> to see what is missing or left over in the library. <strong>Find leftover thumbnails</strong> looks at the files themselves, for thumbnails nothing registers any more.', 'sb-site-kit' ), [ 'strong' => [] ] ) . '</p>';
+
+		// Filled in by the deep scan, which is a separate and slower job.
+		echo '<div class="sbsk-deep" id="sbsk-deep-panel" hidden></div>';
 
 		echo '</div></section>';
 		echo '</div>';

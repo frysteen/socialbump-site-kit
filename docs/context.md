@@ -194,9 +194,21 @@ they dispatch a real DOM change event: save-state listens with addEventListener,
 and a jQuery trigger never reaches it, which left the button disabled while the
 ticks plainly changed.
 
-The engine takes it as an $only argument on stale(), missing_all(), build(),
-clean() and stale_files(). Null means every size, which is what the attachment
-panel and a single image rebuild still pass.
+The engine takes it as an $only argument on missing_all() and build(). Null
+means every size, which is what the attachment panel and a single image rebuild
+still pass.
+
+It deliberately does not reach stale(), stale_files() or clean(). A size that has
+been removed is no longer registered, so it can never appear in the tick list,
+and filtering by that list meant removing a width left its files behind with the
+scan reporting nothing to clear. Clearing old sizes always covers every removed
+size, whatever is ticked.
+
+wanted() returns nothing at all while the Image sizes switch is off, because
+nothing is registered then, so every image-* file an attachment carries becomes
+a leftover to clear. Reading the saved widths without checking the switch meant
+turning the feature off left every file in place with the scan reporting nothing
+to remove.
 
 Each row is a flex line that wraps: a long size name such as
 woocommerce_gallery_thumbnail pushes its pixels down to their own line, right
@@ -264,6 +276,13 @@ run logs every image, because there the skipped ones are the interesting part.
 - log_item() returns one list of rows, made and skipped together, smallest
   size first, so the log reads as the set of sizes rather than two lists stuck
   end to end.
+- The Sizes to build figure is a button when it is not zero, and opens the list
+  of images behind it: a row each, with the sizes that image is missing, a
+  Rebuild by the name for the whole image and one by each size for that size
+  alone. summary() collects the rows on the pass it already makes, capped at
+  LIST_CAP images, because adding a width makes the whole library missing it
+  and nobody reads six hundred rows. ajax_fix() does the work and returns what
+  is left, so a row updates itself or disappears.
 - clean() drops the metadata entry for a stale size, but the file only goes if
   file_has_other_owner() says nothing else uses it: another size of the same
   attachment with the same dimensions (medium at 480 and image-480 share one
@@ -286,6 +305,69 @@ run logs every image, because there the skipped ones are the interesting part.
   panes nobody opened. admin.js watches the page for new panes with a
   MutationObserver and fills each once. The full edit screen still builds its
   meta box in place, one image, no cost worth saving.
+
+#### Find leftover thumbnails (the deep scan)
+
+Three things can be wrong with a size file, and each needs its own check.
+
+- Missing: a registered size with no file. missing_all(), fixed by Build.
+- Removed: a file the metadata still names, for a size the kit no longer
+  registers. stale(), fixed by Remove old sizes, and only ever our own names.
+- Unaccounted: a file on disk that nothing in the database names, whose
+  dimensions no registered size would produce. unaccounted(), fixed by the
+  deep scan.
+
+The third one exists because the orphan scan deliberately gives a free pass to
+any file whose name matches a real attachment, through belongs_to_attachment(),
+so that a WebP sibling or a thumbnail missing from its metadata is never
+deleted. The cost is that an old theme's photo-1300x200 is invisible: not an
+orphan, because it looks like it belongs, and not a removed size, because it
+was never in the metadata at all. On an old site that is most of the junk.
+
+unaccounted() walks the uploads folders, takes every file whose name ends in a
+WxH, and keeps the ones where the base is a real attachment, nothing in the
+database names the file, and those dimensions are not among the ones
+expected_dimensions() says the currently registered sizes would produce for
+that attachment. That last test is what protects a valid thumbnail whose
+metadata went missing: it would be rebuilt at those exact dimensions, so it is
+left alone. expected_dimensions() is pure arithmetic through
+image_resize_dimensions(), no files touched.
+
+Results are grouped by dimensions, not by image, because that is the shape a
+person can judge: 1024 x 750, 412 files, 180 MB is recognisably the old
+WordPress large, where 412 file names would tell you nothing. You tick groups
+and confirm; nothing is deleted by scanning. The list carries a red heading, the
+instruction, and one line saying a plugin switched off right now will appear
+here as well. That last line is the only way this feature can bite, so keep it.
+
+The panel has its own cross, and a normal Scan images clears it, because by then
+it is the answer to the previous question. The quiet re-scan after a deletion
+leaves it alone, since that run redraws it with what is left.
+
+Deleting runs in batches of DEEP_BATCH files, the browser calling until done,
+behind the same bar the rebuild uses, with the count under it. Each batch is checked again server side: still
+unaccounted, not kept, and not referenced, through references_many(), which
+does the three LIKE scans once per fifty names with the names OR'd together
+rather than three per file. That is the slow part of a deletion, and on a big
+database it is still a few seconds per fifty, so a thousand files is a couple
+of minutes; per file it was closer to ten. Files left alone come back with a
+reason and are listed above the refreshed panel rather than quietly dropping
+out of the count.
+
+Image optimisers keep a record of every file they have compressed, which
+mentions the file without using it. WPvivid's stopped a plainly stale thumbnail
+being deleted. Those meta keys are in bookkeeping_keys(), filterable, and both
+reference checks ignore them. Each group opens to the files behind
+it, with a thumbnail, the file name and a link that opens it in a new tab, capped
+at LIST_CAP per group, because dimensions alone are not enough to judge a
+deletion by.
+
+The honest limit, and it is on the screen: a size is only known to be
+registered if something registers it now. Deactivate WooCommerce and its three
+sizes look unaccounted. That is why this is ticked and confirmed rather than a
+single button, and why remove_unaccounted() recomputes the list and rechecks
+is_kept() and references() per file rather than trusting the paths the browser
+sends.
 
 #### Sizes
 

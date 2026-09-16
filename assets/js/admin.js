@@ -158,6 +158,11 @@
 
 				if ( ! quiet ) {
 					$panel.prop( 'hidden', false ).html( '<p>Looking through the library...</p>' );
+
+					// Asking for a normal scan means the leftovers list is last question's
+					// answer. A quiet scan after a deletion keeps it, because that run
+					// redraws it with what is left.
+					$( '#sbsk-deep-panel' ).prop( 'hidden', true ).empty();
 				}
 
 				return $.post( ajaxurl, { action: 'sbsk_images_report', nonce: nonce } ).done( function ( response ) {
@@ -410,6 +415,190 @@
 
 			$( '#sbsk-sizes-none' ).on( 'click', function () {
 				ticked( $sizes.find( '.sbsk-size-choice' ), false );
+			} );
+
+			/**
+			 * Deep scan: the files on disk whose dimensions no registered size
+			 * would produce. Its own button, its own panel, and nothing is
+			 * deleted without ticking a set of dimensions and confirming.
+			 */
+			var $deep = $( '#sbsk-deep-panel' );
+
+			function deepButtons() {
+				$deep.find( '#sbsk-deep-remove' ).prop( 'disabled', $deep.find( '.sbsk-deep-choice:checked' ).length < 1 );
+			}
+
+			$( '#sbsk-deep' ).on( 'click', function () {
+				var $button = $( this );
+
+				$button.prop( 'disabled', true );
+				$deep.prop( 'hidden', false ).html( '<p class="sbsk-deep__working">Looking through the uploads folder...</p>' );
+
+				$.post( ajaxurl, { action: 'sbsk_images_deep', nonce: nonce } ).done( function ( response ) {
+					$button.prop( 'disabled', false );
+
+					if ( response && response.success ) {
+						$deep.html( response.data.html );
+						deepButtons();
+
+						return;
+					}
+
+					$deep.html( '<p class="sbsk-deep__working">Something went wrong. Nothing was changed.</p>' );
+				} ).fail( function () {
+					$button.prop( 'disabled', false );
+					$deep.html( '<p class="sbsk-deep__working">The server did not answer. Nothing was changed.</p>' );
+				} );
+			} );
+
+			$deep.on( 'click', '.sbsk-deep__close', function () {
+				$deep.prop( 'hidden', true ).empty();
+			} );
+
+			$deep.on( 'change', '.sbsk-deep-choice', deepButtons );
+
+			$deep.on( 'click', '.sbsk-deep-show', function () {
+				var $files = $( this ).closest( 'li' ).find( '.sbsk-deep__files' );
+				var shut   = $files.prop( 'hidden' );
+
+				$files.prop( 'hidden', ! shut );
+				$( this ).text( shut ? 'Hide files' : 'Show files' );
+			} );
+
+			$deep.on( 'click', '#sbsk-deep-all, #sbsk-deep-none', function () {
+				$deep.find( '.sbsk-deep-choice' ).prop( 'checked', this.id === 'sbsk-deep-all' );
+				deepButtons();
+			} );
+
+			$deep.on( 'click', '#sbsk-deep-remove', function () {
+				var dims  = [];
+				var files = 0;
+
+				$deep.find( '.sbsk-deep-choice:checked' ).each( function () {
+					dims.push( this.value );
+					files += parseInt( $( this ).closest( 'li' ).find( '.sbsk-deep__row span' ).text(), 10 ) || 0;
+				} );
+
+				if ( ! dims.length ) {
+					return;
+				}
+
+				if ( ! window.confirm( 'Delete ' + files + ' file' + ( files === 1 ? '' : 's' ) + ' at ' + dims.length + ' size' + ( dims.length === 1 ? '' : 's' ) + '? This cannot be undone.' ) ) {
+					return;
+				}
+
+				var removed = 0;
+				var freed   = 0;
+				var skipped = [];
+
+				// The same bar the rebuild uses, so a long delete looks like work rather
+				// than a stuck line of text.
+				$deep.html( '<div class="sbsk-rebuild__bar sbsk-deep__bar"><span></span></div><p class="sbsk-deep__working">Deleting...</p>' );
+
+				/**
+				 * One batch per request, so a big clean-up never sits in one call
+				 * long enough to hit a time limit. Skipped files come back with
+				 * their reasons and are shown once it finishes.
+				 */
+				function batch( offset ) {
+					$.post( ajaxurl, { action: 'sbsk_images_deep_remove', nonce: nonce, dims: dims, offset: offset } ).done( function ( response ) {
+						if ( ! response || ! response.success ) {
+							$deep.html( '<p class="sbsk-deep__working">Something went wrong. ' + removed + ' files had already been removed.</p>' );
+
+							return;
+						}
+
+						var data = response.data;
+
+						removed += data.removed;
+						freed   += data.bytes;
+						skipped  = skipped.concat( data.skipped || [] );
+
+						if ( ! data.done ) {
+							var seen = Math.min( removed + skipped.length, data.total || files );
+
+							$deep.find( '.sbsk-deep__bar span' ).css( 'width', ( data.total ? Math.round( ( seen / data.total ) * 100 ) : 0 ) + '%' );
+							$deep.find( '.sbsk-deep__working' ).text( 'Deleting... ' + removed + ' of ' + files + ' removed.' );
+							batch( data.offset );
+
+							return;
+						}
+
+						var note = '<p class="sbsk-deep__working">Removed ' + removed + ' file' + ( removed === 1 ? '' : 's' ) + ', ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed.</p>';
+
+						if ( skipped.length ) {
+							note += '<div class="sbsk-deep__skipped"><p>' + skipped.length + ' file' + ( skipped.length === 1 ? ' was' : 's were' ) + ' left alone:</p><ul>';
+
+							skipped.slice( 0, 20 ).forEach( function ( skip ) {
+								note += '<li><code>' + $( '<span>' ).text( skip.name ).html() + '</code> <span>' + $( '<span>' ).text( skip.why ).html() + '</span></li>';
+							} );
+
+							if ( skipped.length > 20 ) {
+								note += '<li class="sbsk-deep__more">and ' + ( skipped.length - 20 ) + ' more</li>';
+							}
+
+							note += '</ul></div>';
+						}
+
+						$deep.html( note + data.html );
+						deepButtons();
+						scan( true );
+					} ).fail( function () {
+						$deep.html( '<p class="sbsk-deep__working">The server did not answer. ' + removed + ' files had already been removed.</p>' );
+					} );
+				}
+
+				batch( 0 );
+			} );
+
+			// The Sizes to build figure opens the list of images behind it.
+			$panel.on( 'click', '.sbsk-stat.is-openable', function () {
+				var $list = $panel.find( '#' + $( this ).data( 'opens' ) );
+				var shut  = $list.prop( 'hidden' );
+
+				$list.prop( 'hidden', ! shut );
+				$( this ).find( '.sbsk-stat__more' ).text( shut ? 'Hide images' : 'Show images' );
+			} );
+
+			/**
+			 * Rebuild by an image name does every size it is missing; rebuild by a
+			 * size does that one. The row keeps up with what is left, and goes when
+			 * there is nothing left to build.
+			 */
+			$panel.on( 'click', '.sbsk-fix', function () {
+				var $button = $( this );
+				var $row    = $button.closest( '.sbsk-missing__row' );
+				var size    = $button.data( 'size' );
+
+				$row.find( '.sbsk-fix' ).prop( 'disabled', true );
+
+				$.post( ajaxurl, { action: 'sbsk_images_fix', nonce: nonce, id: $button.data( 'id' ), sizes: size ? [ size ] : [] } ).done( function ( response ) {
+					if ( ! response || ! response.success ) {
+						$row.find( '.sbsk-fix' ).prop( 'disabled', false );
+
+						return;
+					}
+
+					var left = response.data.left || [];
+
+					if ( ! left.length ) {
+						$row.remove();
+						scan( true );
+
+						return;
+					}
+
+					$row.find( 'li[data-size]' ).each( function () {
+						if ( left.indexOf( $( this ).data( 'size' ) ) === -1 ) {
+							$( this ).remove();
+						}
+					} );
+
+					$row.find( '.sbsk-fix' ).prop( 'disabled', false );
+					scan( true );
+				} ).fail( function () {
+					$row.find( '.sbsk-fix' ).prop( 'disabled', false );
+				} );
 			} );
 
 			$panel.on( 'click', '#sbsk-show-all', function () {

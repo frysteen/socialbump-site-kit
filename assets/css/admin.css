@@ -1892,3 +1892,239 @@ table.sbsk-report tr.sbsk-report__morerow td {
 	font-style: normal;
 	font-size: 11px;
 }
+
+/* A button, but it has to look exactly like the plain stat beside it: the
+   default button chrome is what gave it a dark border. */
+.wp-core-ui .sbsk-stat.is-openable {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 14px 16px;
+	background: #f6f7f7;
+	border: 0;
+	border-left: 3px solid #c3c4c7;
+	border-radius: 6px;
+	box-shadow: none;
+	text-align: left;
+	cursor: pointer;
+	font: inherit;
+	line-height: inherit;
+	height: auto;
+}
+
+.wp-core-ui .sbsk-stat.is-openable:hover,
+.wp-core-ui .sbsk-stat.is-openable:focus {
+	background: #f0f0f1;
+	box-shadow: none;
+}
+
+.sbsk-stat__more {
+	margin-top: 6px;
+	color: #2271b1;
+	font-size: 11px;
+	text-decoration: underline;
+}
+
+/* The same grey panel the progress log sits in, so the two read as one thing. */
+.sbsk-missing {
+	margin: 18px 0 0;
+	padding: 14px 16px;
+	background: #f6f7f7;
+	border-radius: 6px;
+}
+
+.sbsk-missing .sbsk-progress__log {
+	margin: 0;
+}
+
+.sbsk-missing__log {
+	max-height: 460px;
+}
+
+.sbsk-missing__row .button-link {
+	font-size: 11px;
+}
+
+.sbsk-missing__note {
+	margin: 8px 0 0;
+	color: #787c82;
+	font-size: 12px;
+}
+
+.sbsk-deep {
+	position: relative;
+	margin: 18px 0 0;
+	padding: 14px 16px;
+	background: #f6f7f7;
+	border-radius: 6px;
+}
+
+.sbsk-deep__head p {
+	margin: 0 0 6px;
+}
+
+.sbsk-deep__warn {
+	color: #8a6400;
+	font-size: 12px;
+}
+
+.sbsk-deep__working,
+.sbsk-deep__none {
+	margin: 0;
+}
+
+.sbsk-deep__list {
+	margin: 10px 0;
+	max-height: 320px;
+	overflow-y: auto;
+	font-size: 12px;
+}
+
+.sbsk-deep__list li {
+	margin: 0;
+	padding: 4px 6px;
+	border-radius: 3px;
+}
+
+.sbsk-deep__list li:nth-child(odd) {
+	background: #fff;
+}
+
+.sbsk-deep__list code {
+	background: none;
+	padding: 0;
+}
+
+.sbsk-deep__list span {
+	color: #787c82;
+}
+
+.sbsk-deep__foot {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-top: 10px;
+	border-top: 1px solid #dcdcde;
+	font-size: 12px;
+}
+
+.sbsk-deep__foot .button {
+	margin-left: auto;
+}
+
+.sbsk-deep__row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.sbsk-deep__row label {
+	flex: 1 1 auto;
+}
+
+.sbsk-deep__files {
+	margin: 4px 0 8px 26px;
+}
+
+.sbsk-deep__files li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 6px;
+	background: none;
+}
+
+.sbsk-deep__files img {
+	flex: none;
+	width: 32px;
+	height: 32px;
+	object-fit: cover;
+	border-radius: 3px;
+	background: #fff;
+}
+
+.sbsk-deep__files a {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.sbsk-deep__more {
+	color: #787c82;
+	font-style: italic;
+}
+
+/* A quieter outline than the green actions: it starts a look, not a change. */
+.wp-core-ui .sbsk-button--deep {
+	background: #fff;
+	border-color: #8c8f94;
+	color: #3c434a;
+}
+
+.wp-core-ui .sbsk-button--deep:hover {
+	border-color: #50575e;
+	color: #1d2327;
+}
+
+.sbsk-rebuild__help {
+	margin: 10px 0 0;
+	color: #787c82;
+	font-size: 12px;
+}
+
+.sbsk-deep__head h3 {
+	margin: 0 0 6px;
+	color: #b32d2e;
+	font-size: 14px;
+}
+
+.sbsk-deep__close {
+	position: absolute;
+	top: 8px;
+	right: 10px;
+	padding: 0 4px;
+	background: none;
+	border: 0;
+	color: #787c82;
+	font-size: 18px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.sbsk-deep__close:hover {
+	color: #1d2327;
+}
+
+.sbsk-deep__skipped {
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	background: #fcf9e8;
+	border-left: 3px solid #dba617;
+	border-radius: 4px;
+	font-size: 12px;
+}
+
+.sbsk-deep__skipped p {
+	margin: 0 0 4px;
+}
+
+.sbsk-deep__skipped ul {
+	margin: 0;
+}
+
+.sbsk-deep__skipped li {
+	margin: 2px 0;
+}
+
+.sbsk-deep__skipped code {
+	background: none;
+	padding: 0;
+}
+
+.sbsk-deep__skipped span {
+	color: #787c82;
+}
+
+.sbsk-deep__bar {
+	margin: 0 0 10px;
+}
