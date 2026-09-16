@@ -275,12 +275,23 @@ class SBSK_Images_Rebuild {
 			$extension = pathinfo( $entry['file'], PATHINFO_EXTENSION );
 			$wanted    = $base . '-' . (int) $entry['width'] . 'x' . (int) $entry['height'] . '.' . $extension;
 
+			// Two sizes with the same dimensions share one file: thumbnail and
+			// woocommerce_thumbnail are both 300 x 300 cropped. The first one moves
+			// it, so the second finds its source already gone and must point at
+			// where it went, or it records a file that is not there.
 			if ( $entry['file'] !== $wanted ) {
-				if ( file_exists( $folder . $wanted ) ) {
-					wp_delete_file( $folder . $wanted );
-				}
+				$source = $folder . $entry['file'];
+				$target = $folder . $wanted;
 
-				if ( @rename( $folder . $entry['file'], $folder . $wanted ) ) {
+				if ( file_exists( $source ) ) {
+					if ( file_exists( $target ) ) {
+						wp_delete_file( $target );
+					}
+
+					if ( @rename( $source, $target ) ) {
+						$entry['file'] = $wanted;
+					}
+				} elseif ( file_exists( $target ) ) {
 					$entry['file'] = $wanted;
 				}
 			}

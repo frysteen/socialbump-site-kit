@@ -233,6 +233,10 @@ there now gives the size it would have been and why it was not made, rather than
 a bare not needed, which covered all three reasons at once and told you nothing. A clean
 logs its rows too. log_item() in the tools class builds all of it.
 
+A plain build only logs images something was actually done to, since it passes
+over most of the library and a row per untouched image says nothing. A forced
+run logs every image, because there the skipped ones are the interesting part.
+
 #### How the engine and the tools keep their cost down
 
 - make_sizes() decodes an image once and makes every wanted size from it with
@@ -241,7 +245,15 @@ logs its rows too. log_item() in the tools class builds all of it.
   size: thirteen decodes of one photo for one rebuild. multi_resize() names
   files after the file it loaded, and the attached file can be the -scaled one
   while the thumbnails carry the original name, so each made file is moved to
-  the base_name() the set uses, replacing what was there.
+  the base_name() the set uses, replacing what was there. Two sizes with the
+  same dimensions share one file, thumbnail and woocommerce_thumbnail both
+  being 300 x 300 cropped, so the first one moves it and the second finds its
+  source gone: it has to point at where the file went instead. Missing that
+  wrote metadata naming a file that was not there, and the size showed as
+  missing straight after being built. It only shows on a -scaled original,
+  where the names differ at all, and only with two sizes of equal dimensions,
+  so a site without WooCommerce never sees it. Test rebuilds on a site that
+  has both.
 - clean() drops the metadata entry for a stale size, but the file only goes if
   file_has_other_owner() says nothing else uses it: another size of the same
   attachment with the same dimensions (medium at 480 and image-480 share one
@@ -745,6 +757,9 @@ code and shows a Publishing page.
   the response.
 - The first release may carry the version already in the files. Every release
   after that has to be higher than the last.
+- A version needs all three parts, so 1.1 is padded to 1.1.0 when you leave the
+  field, and again on save in case the form never lost focus. Typing 1.1 used
+  to get you the browser complaining about a pattern it does not explain.
 - Everything in the plugin folder is published except .git, .github, node_modules
   and .DS_Store. These docs ship with the plugin, so they reach every site, and
   the repos are public: nothing private goes in them.

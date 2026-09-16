@@ -209,7 +209,12 @@ class SBSK_Images_Tools {
 
 			$made   = SBSK_Images_Rebuild::build( $id, true, $chosen );
 			$built += count( $made );
-			$items[] = self::log_item( $id, $made, [] );
+
+			// Only images something was done to. A plain build passes over most of the
+			// library, and listing every one of those said nothing.
+			if ( $made ) {
+				$items[] = self::log_item( $id, $made, [] );
+			}
 		}
 
 		if ( count( $ids ) < $size ) {
