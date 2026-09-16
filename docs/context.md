@@ -254,6 +254,16 @@ run logs every image, because there the skipped ones are the interesting part.
   where the names differ at all, and only with two sizes of equal dimensions,
   so a site without WooCommerce never sees it. Test rebuilds on a site that
   has both.
+- can_make() is the one rule for whether a size is worth making, used by both
+  missing_all() and rebuild() so forcing is never a smaller job than a plain
+  build. A cropped size needs the original to be at least that big both ways;
+  an uncropped size is a box, so it is worth making when the original
+  overflows it either way. Judging on width alone made a forced rebuild skip
+  a 1536 x 1536 on a 1281 x 1920 portrait, which a plain build would have made
+  at 1024 x 1536.
+- log_item() returns one list of rows, made and skipped together, smallest
+  size first, so the log reads as the set of sizes rather than two lists stuck
+  end to end.
 - clean() drops the metadata entry for a stale size, but the file only goes if
   file_has_other_owner() says nothing else uses it: another size of the same
   attachment with the same dimensions (medium at 480 and image-480 share one

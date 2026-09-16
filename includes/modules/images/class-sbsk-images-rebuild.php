@@ -505,6 +505,33 @@ class SBSK_Images_Rebuild {
 	 * A size is only expected when the original is big enough for it, since
 	 * WordPress will not stretch an image to fill a larger size.
 	 */
+	/**
+	 * Whether a size can be made from an original of these dimensions.
+	 *
+	 * A cropped size needs the original to be at least that big both ways. An
+	 * uncropped size is a box to fit inside, so it is worth making only when the
+	 * original overflows the box in one direction or the other: a 1281 x 1920
+	 * portrait does need a 1536 x 1536, at 1024 x 1536, even though it is
+	 * narrower than 1536. Judging that on width alone made a forced rebuild skip
+	 * sizes a plain build would have made.
+	 */
+	public static function can_make( $width, $height, array $size ) {
+		$width  = (int) $width;
+		$height = (int) $height;
+		$want_w = (int) $size['width'];
+		$want_h = (int) $size['height'];
+
+		if ( ! $width || ! $height ) {
+			return false;
+		}
+
+		if ( ! empty( $size['crop'] ) ) {
+			return $width >= $want_w && ( ! $want_h || $height >= $want_h );
+		}
+
+		return ( $want_w && $width > $want_w ) || ( $want_h && $want_h < 9999 && $height > $want_h );
+	}
+
 	public static function missing_all( $id, array $meta = null, array $only = null ) {
 		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 
@@ -520,11 +547,7 @@ class SBSK_Images_Rebuild {
 				continue;
 			}
 
-			$fits = $size['crop']
-				? ( (int) $meta['width'] >= $size['width'] && (int) $meta['height'] >= $size['height'] )
-				: ( ( $size['width'] && (int) $meta['width'] > $size['width'] ) || ( $size['height'] && (int) $meta['height'] > $size['height'] ) );
-
-			if ( $fits ) {
+			if ( self::can_make( $meta['width'], $meta['height'] ?? 0, $size ) ) {
 				$missing[] = $name;
 			}
 		}
@@ -561,8 +584,8 @@ class SBSK_Images_Rebuild {
 
 			$spec = $sizes[ $name ];
 
-			// Nothing to gain from stretching a small original.
-			if ( ! empty( $meta['width'] ) && $spec['width'] && (int) $meta['width'] < $spec['width'] ) {
+			// The same rule a plain build uses, so forcing is never a smaller job.
+			if ( ! self::can_make( $meta['width'] ?? 0, $meta['height'] ?? 0, $spec ) ) {
 				continue;
 			}
 

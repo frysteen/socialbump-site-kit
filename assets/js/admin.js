@@ -287,14 +287,13 @@
 						 * reading.
 						 */
 						data.items.forEach( function ( item ) {
-							var sizes = ( item.sizes || [] ).map( function ( name ) {
-								return '<li><span class="sbsk-tick">&#10003;</span>' + name + '</li>';
-							} ).join( '' );
+							// Made and skipped in one list, smallest size first.
+							var sizes = ( item.rows || [] ).map( function ( row ) {
+								if ( row.made ) {
+									return '<li><span class="sbsk-tick">&#10003;</span>' + row.name + '</li>';
+								}
 
-							// A size that was asked for and not made says why, rather than
-							// leaving an image with nothing under it.
-							sizes += ( item.skipped || [] ).map( function ( miss ) {
-								return '<li class="is-skipped"><span class="sbsk-tick sbsk-tick--skip">&#10005;</span>' + miss.name + ' <em>' + miss.why + '</em></li>';
+								return '<li class="is-skipped"><span class="sbsk-tick sbsk-tick--skip">&#10005;</span>' + row.name + ' <em>' + row.why + '</em></li>';
 							} ).join( '' );
 
 							var thumb = item.thumb ? '<img class="sbsk-log__thumb" src="' + item.thumb + '" alt="">' : '<span class="sbsk-log__thumb is-empty"></span>';

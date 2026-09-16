@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,10 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.2 =
+* A forced rebuild no longer skips sizes on tall images that a normal build would have made, such as the 1536 size on a portrait photo.
+* The list of sizes under each image in the progress panel is now in size order, with the ones that were skipped in their right place rather than all at the end.
+
 = 1.1.1 =
 * Fixed thumbnails that were reported as built but still showed as missing. It affected images WordPress had scaled down on upload, where two image sizes have identical dimensions, such as the WooCommerce thumbnail and the WordPress thumbnail. Run Build Thumbnails once after updating to repair any affected images.
 

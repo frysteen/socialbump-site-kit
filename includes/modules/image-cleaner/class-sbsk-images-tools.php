@@ -268,25 +268,44 @@ class SBSK_Images_Tools {
 		$sizes  = SBSK_Images_Rebuild::all_wanted();
 		$width  = isset( $meta['width'] ) ? (int) $meta['width'] : 0;
 		$height = isset( $meta['height'] ) ? (int) $meta['height'] : 0;
-		$notes  = [];
+		$rows   = [];
+
+		foreach ( $made as $name ) {
+			$rows[] = [
+				'name'  => $name,
+				'made'  => true,
+				'why'   => '',
+				'width' => isset( $sizes[ $name ] ) ? (int) $sizes[ $name ]['width'] : 0,
+			];
+		}
 
 		foreach ( $skipped as $name ) {
 			if ( ! isset( $sizes[ $name ] ) ) {
 				continue;
 			}
 
-			$notes[] = [
-				'name' => $name,
-				'why'  => __( 'skipped', 'sb-site-kit' ) . ', ' . self::skip_reason( $width, $height, $sizes[ $name ] ),
+			$rows[] = [
+				'name'  => $name,
+				'made'  => false,
+				'why'   => __( 'skipped', 'sb-site-kit' ) . ', ' . self::skip_reason( $width, $height, $sizes[ $name ] ),
+				'width' => (int) $sizes[ $name ]['width'],
 			];
 		}
 
+		// Smallest first, made and skipped together, so the list reads as the set
+		// of sizes rather than two lists stuck end to end.
+		usort(
+			$rows,
+			function ( $a, $b ) {
+				return $a['width'] === $b['width'] ? strcmp( $a['name'], $b['name'] ) : $a['width'] <=> $b['width'];
+			}
+		);
+
 		return [
-			'name'    => basename( (string) get_attached_file( $id ) ),
-			'thumb'   => self::preview( $id ),
-			'dims'    => ( $width && ! empty( $meta['height'] ) ) ? $width . ' x ' . (int) $meta['height'] . ' px' : '',
-			'sizes'   => array_values( $made ),
-			'skipped' => $notes,
+			'name'  => basename( (string) get_attached_file( $id ) ),
+			'thumb' => self::preview( $id ),
+			'dims'  => ( $width && $height ) ? $width . ' x ' . $height . ' px' : '',
+			'rows'  => $rows,
 		];
 	}
 
