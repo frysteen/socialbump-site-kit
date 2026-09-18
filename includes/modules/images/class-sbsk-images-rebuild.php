@@ -524,28 +524,21 @@ class SBSK_Images_Rebuild {
 	/**
 	 * Whether a size can be made from an original of these dimensions.
 	 *
-	 * A cropped size needs the original to be at least that big both ways. An
-	 * uncropped size is a box to fit inside, so it is worth making only when the
-	 * original overflows the box in one direction or the other: a 1281 x 1920
-	 * portrait does need a 1536 x 1536, at 1024 x 1536, even though it is
-	 * narrower than 1536. Judging that on width alone made a forced rebuild skip
-	 * sizes a plain build would have made.
+	 * WordPress's own sizing function is the authority, so this asks it rather
+	 * than working it out again. Hand rolled rules got the edge cases wrong: a
+	 * 600 x 400 original and a 600 x 400 crop looked makeable, but WordPress
+	 * makes no file when the result would be the original, so those images sat
+	 * in Sizes to build for ever and no rebuild could satisfy them.
 	 */
 	public static function can_make( $width, $height, array $size ) {
 		$width  = (int) $width;
 		$height = (int) $height;
-		$want_w = (int) $size['width'];
-		$want_h = (int) $size['height'];
 
 		if ( ! $width || ! $height ) {
 			return false;
 		}
 
-		if ( ! empty( $size['crop'] ) ) {
-			return $width >= $want_w && ( ! $want_h || $height >= $want_h );
-		}
-
-		return ( $want_w && $width > $want_w ) || ( $want_h && $want_h < 9999 && $height > $want_h );
+		return (bool) image_resize_dimensions( $width, $height, (int) $size['width'], (int) $size['height'], ! empty( $size['crop'] ) );
 	}
 
 	public static function missing_all( $id, array $meta = null, array $only = null ) {

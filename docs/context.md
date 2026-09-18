@@ -268,11 +268,14 @@ run logs every image, because there the skipped ones are the interesting part.
   has both.
 - can_make() is the one rule for whether a size is worth making, used by both
   missing_all() and rebuild() so forcing is never a smaller job than a plain
-  build. A cropped size needs the original to be at least that big both ways;
-  an uncropped size is a box, so it is worth making when the original
-  overflows it either way. Judging on width alone made a forced rebuild skip
-  a 1536 x 1536 on a 1281 x 1920 portrait, which a plain build would have made
-  at 1024 x 1536.
+  build. It asks image_resize_dimensions(), which is what WordPress itself
+  uses, rather than working the rule out again. Two hand rolled versions got
+  it wrong: judging on width alone made a forced rebuild skip a 1536 x 1536 on
+  a 1281 x 1920 portrait; requiring a crop to fit both ways reported 600 x 400
+  images as missing a 600 x 400 crop for ever, since WordPress makes no file
+  when the result would be the original, and hid the cropped sizes WordPress
+  does make from a short source, such as 600 x 466 for a 600 x 600 crop of a
+  1200 x 466 image. Ask WordPress; do not restate its rules.
 - log_item() returns one list of rows, made and skipped together, smallest
   size first, so the log reads as the set of sizes rather than two lists stuck
   end to end.

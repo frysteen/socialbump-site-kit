@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.5
+Stable tag: 1.1.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.6 =
+* Fixed two errors in deciding which thumbnails an image needs. Images the same size as a cropped thumbnail no longer sit in Sizes to build for ever, and cropped sizes that WordPress can make from a short image are no longer skipped.
+
 = 1.1.5 =
 * Fixed files being held back as in use when the thing referring to them had already been deleted. The check now reads the site fresh at the start of each scan, and says a file is in use only when it can point at what is using it.
 
