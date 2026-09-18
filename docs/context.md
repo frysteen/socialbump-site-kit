@@ -333,6 +333,15 @@ metadata went missing: it would be rebuilt at those exact dimensions, so it is
 left alone. expected_dimensions() is pure arithmetic through
 image_resize_dimensions(), no files touched.
 
+The size list groups by ours, WordPress, WooCommerce and Other. Grouping the
+rest by the theme or plugin that registered them is not possible and was tried
+twice: WordPress records nothing about who registered a size; reading the code
+for add_image_size misses anything registered through a filter or with a built
+up name, which is how Total and Gravity Forms both do it; and registration
+timing puts the theme and the plugins in the same bucket, since both land on
+init. A wrong label is worse than none on a page whose next button deletes
+files, so Other it is.
+
 Results are grouped by dimensions, not by image, because that is the shape a
 person can judge: 1024 x 750, 412 files, 180 MB is recognisably the old
 WordPress large, where 412 file names would tell you nothing. You tick groups
@@ -353,6 +362,16 @@ database it is still a few seconds per fifty, so a thousand files is a couple
 of minutes; per file it was closer to ten. Files left alone come back with a
 reason and are listed above the refreshed panel rather than quietly dropping
 out of the count.
+
+The reference check reads the content once rather than once per file.
+mentioned_names() pulls every image file name out of post content, postmeta and
+options in three queries and holds the set for ten minutes; after that a check is
+an array lookup, and only a name that is actually mentioned costs a query, to say
+what is using it. It was three LIKE scans per file before, each reading a whole
+table, so a site with 685 orphans spent 64 seconds on a scan that is otherwise
+a fifth of a second. Batching the names into one OR'd query does not help,
+because the LIKEs still scan; reading the content once is the only fix. Measured
+on doogood.com.au: 64s to 0.24s, plus 0.28s to build the index, same answers.
 
 Image optimisers keep a record of every file they have compressed, which
 mentions the file without using it. WPvivid's stopped a plainly stale thumbnail

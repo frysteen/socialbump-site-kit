@@ -419,76 +419,135 @@ class SBSK_Images_Orphans {
 	}
 
 	/**
-	 * references() for a batch, in three queries instead of three per file.
+	 * Every image file name mentioned anywhere in the site's content.
 	 *
-	 * The three LIKE scans are unindexed, so on a big library one per file is
-	 * the slow part of a deletion. One scan per table with the names OR'd
-	 * together finds every row that mentions any of them, and the rows are
-	 * sorted to their names in PHP. Returns name => labels, only for names that
-	 * are mentioned somewhere.
+	 * The reference check used to be three LIKE scans per file. Each one reads
+	 * the whole table, so 685 orphans meant two thousand scans and a minute of
+	 * waiting on a scan that is otherwise a fifth of a second. Batching the
+	 * names into one query does not help, because the OR'd LIKEs still scan.
+	 *
+	 * So the content is read once instead: every row that mentions the uploads
+	 * folder, with the file names pulled out of it. After that a check is an
+	 * array lookup. Held for ten minutes, which covers a scan and the deletion
+	 * that follows it.
 	 */
-	public static function references_many( array $paths ) {
+	public static function mentioned_names( $fresh = false ) {
+		static $names = null;
+
+		if ( $names !== null && ! $fresh ) {
+			return $names;
+		}
+
+		$key = 'sbsk_mentioned_names';
+
+		if ( ! $fresh ) {
+			$held = get_transient( $key );
+
+			if ( is_array( $held ) ) {
+				$names = $held;
+
+				return $names;
+			}
+		}
+
 		global $wpdb;
 
 		$names = [];
+		$like  = '%' . $wpdb->esc_like( 'wp-content/uploads' ) . '%';
 
-		foreach ( $paths as $path ) {
-			$names[ basename( $path ) ] = true;
-		}
-
-		$names = array_keys( $names );
-		$found = [];
-
-		if ( ! $names ) {
-			return $found;
-		}
-
-		$likes = [];
-		$args  = [];
-
-		foreach ( $names as $name ) {
-			$likes[] = '%s';
-			$args[]  = '%' . $wpdb->esc_like( $name ) . '%';
-		}
-
-		$attach = function ( $rows, $field, $label_from ) use ( $names, &$found ) {
+		$collect = function ( $rows ) use ( &$names ) {
 			foreach ( $rows as $row ) {
-				foreach ( $names as $name ) {
-					if ( strpos( $row->$field, $name ) === false ) {
-						continue;
-					}
+				if ( ! preg_match_all( '/[^\/\\\\"\'\s>]+\.(?:jpe?g|png|gif|webp|avif|svg|bmp|tiff?)/i', (string) $row, $hits ) ) {
+					continue;
+				}
 
-					$label = $label_from( $row );
-
-					if ( ! isset( $found[ $name ] ) || ! in_array( $label, $found[ $name ], true ) ) {
-						$found[ $name ][] = $label;
-					}
+				foreach ( $hits[0] as $hit ) {
+					$names[ strtolower( $hit ) ] = true;
 				}
 			}
 		};
 
-		$where = 'post_content LIKE ' . implode( ' OR post_content LIKE ', $likes );
-		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_title, post_type, post_content FROM {$wpdb->posts} WHERE ( {$where} ) AND post_type <> 'revision' LIMIT 500", $args ) );
+		$collect( $wpdb->get_col( $wpdb->prepare( "SELECT post_content FROM {$wpdb->posts} WHERE post_content LIKE %s AND post_type <> 'revision' LIMIT 5000", $like ) ) );
 
-		$attach( $rows, 'post_content', function ( $row ) {
-			return sprintf( '%s (%s)', $row->post_title !== '' ? $row->post_title : ( '#' . $row->ID ), $row->post_type );
-		} );
+		$skip = array_merge( [ '_wp_attachment_metadata', '_wp_attached_file', '_wp_attachment_backup_sizes' ], self::bookkeeping_keys() );
+		$hold = implode( ',', array_fill( 0, count( $skip ), '%s' ) );
 
-		$skip  = array_merge( [ '_wp_attachment_metadata' ], self::bookkeeping_keys() );
-		$hold  = implode( ',', array_fill( 0, count( $skip ), '%s' ) );
-		$where = 'm.meta_value LIKE ' . implode( ' OR m.meta_value LIKE ', $likes );
-		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, p.post_title, p.post_type, m.meta_value FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE ( {$where} ) AND p.post_type <> 'revision' AND m.meta_key NOT IN ( {$hold} ) LIMIT 500", array_merge( $args, $skip ) ) );
+		$collect( $wpdb->get_col( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_value LIKE %s AND meta_key NOT IN ( {$hold} ) LIMIT 20000", array_merge( [ $like ], $skip ) ) ) );
 
-		$attach( $rows, 'meta_value', function ( $row ) {
-			return sprintf( '%s (%s)', $row->post_title !== '' ? $row->post_title : ( '#' . $row->ID ), $row->post_type );
-		} );
+		$collect( $wpdb->get_col( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_value LIKE %s AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' LIMIT 2000", $like ) ) );
 
-		$where = 'option_value LIKE ' . implode( ' OR option_value LIKE ', $likes );
-		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE ( {$where} ) AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' LIMIT 200", $args ) );
+		set_transient( $key, $names, 10 * MINUTE_IN_SECONDS );
 
-		$attach( $rows, 'option_value', function ( $row ) {
-			return sprintf( '%s (setting)', $row->option_name );
-		} );
+		return $names;
+	}
+
+	/** Forget the mentions, so the next check reads the content again. */
+	public static function forget_mentions() {
+		delete_transient( 'sbsk_mentioned_names' );
+	}
+
+	/**
+	 * Whether anything in the site's content mentions this file, and where.
+	 *
+	 * The lookup is free; only a file that is actually mentioned costs a query,
+	 * and that is to name what is using it.
+	 */
+	public static function references( $path ) {
+		$name    = strtolower( basename( $path ) );
+		$names   = self::mentioned_names();
+
+		if ( ! isset( $names[ $name ] ) ) {
+			return [];
+		}
+
+		global $wpdb;
+
+		$like  = '%' . $wpdb->esc_like( basename( $path ) ) . '%';
+		$found = [];
+
+		$posts = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_title, post_type FROM {$wpdb->posts} WHERE post_content LIKE %s AND post_type <> 'revision' LIMIT 3", $like ) );
+
+		foreach ( $posts as $post ) {
+			$found[] = sprintf( '%s (%s)', $post->post_title !== '' ? $post->post_title : ( '#' . $post->ID ), $post->post_type );
+		}
+
+		$skip = array_merge( [ '_wp_attachment_metadata' ], self::bookkeeping_keys() );
+		$hold = implode( ',', array_fill( 0, count( $skip ), '%s' ) );
+
+		$meta = $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, p.post_title, p.post_type FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE m.meta_value LIKE %s AND p.post_type <> 'revision' AND m.meta_key NOT IN ( {$hold} ) LIMIT 3", array_merge( [ $like ], $skip ) ) );
+
+		foreach ( $meta as $post ) {
+			$label = sprintf( '%s (%s)', $post->post_title !== '' ? $post->post_title : ( '#' . $post->ID ), $post->post_type );
+
+			if ( ! in_array( $label, $found, true ) ) {
+				$found[] = $label;
+			}
+		}
+
+		if ( ! $found ) {
+			$options = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_value LIKE %s AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' LIMIT 2", $like ) );
+
+			foreach ( $options as $option ) {
+				$found[] = sprintf( '%s (setting)', $option );
+			}
+		}
+
+		// Mentioned but not found by the targeted queries: still in use, and
+		// saying so without a name beats saying nothing.
+		return $found ? $found : [ __( 'site content', 'sb-site-kit' ) ];
+	}
+
+	/** references() for a batch. The lookup is per name, so this is a loop. */
+	public static function references_many( array $paths ) {
+		$found = [];
+
+		foreach ( $paths as $path ) {
+			$used = self::references( $path );
+
+			if ( $used ) {
+				$found[ basename( $path ) ] = $used;
+			}
+		}
 
 		return $found;
 	}
@@ -622,50 +681,6 @@ class SBSK_Images_Orphans {
 		);
 	}
 
-	public static function references( $path ) {
-		global $wpdb;
-
-		$name  = basename( $path );
-		$like  = '%' . $wpdb->esc_like( $name ) . '%';
-		$found = [];
-
-		$posts = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT ID, post_title, post_type FROM {$wpdb->posts} WHERE post_content LIKE %s AND post_type <> 'revision' LIMIT 3",
-				$like
-			)
-		);
-
-		foreach ( $posts as $post ) {
-			$found[] = sprintf( '%s (%s)', $post->post_title !== '' ? $post->post_title : ( '#' . $post->ID ), $post->post_type );
-		}
-
-		$skip = array_merge( [ '_wp_attachment_metadata' ], self::bookkeeping_keys() );
-		$hold = implode( ',', array_fill( 0, count( $skip ), '%s' ) );
-
-		$meta = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT p.ID, p.post_title, p.post_type FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE m.meta_value LIKE %s AND p.post_type <> 'revision' AND m.meta_key NOT IN ( {$hold} ) LIMIT 3",
-				array_merge( [ $like ], $skip )
-			)
-		);
-
-		foreach ( $meta as $post ) {
-			$label = sprintf( '%s (%s)', $post->post_title !== '' ? $post->post_title : ( '#' . $post->ID ), $post->post_type );
-
-			if ( ! in_array( $label, $found, true ) ) {
-				$found[] = $label;
-			}
-		}
-
-		$options = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_value LIKE %s AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' LIMIT 2", $like ) );
-
-		foreach ( $options as $option ) {
-			$found[] = sprintf( '%s (setting)', $option );
-		}
-
-		return $found;
-	}
 	/** Delete the files found, checking each one again as it goes. */
 	public static function remove( array $paths, $force = false ) {
 		$known   = self::known();

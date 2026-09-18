@@ -35,6 +35,12 @@ class SBSK_Images_Cleaner {
 	/**
 	 * Every registered size, grouped for the list on the page: ours, the ones
 	 * WordPress makes, WooCommerce's, and whatever else is registered.
+	 *
+	 * Grouping the rest by the theme or plugin that registered them is not
+	 * possible: WordPress does not record it, reading the code misses anything
+	 * registered through a filter or with a built up name, which is how the
+	 * common ones do it, and registration timing puts the theme and the plugins
+	 * in the same bucket. Tried both; neither was honest enough to show.
 	 */
 	public static function size_groups() {
 		$core   = [ 'thumbnail', 'medium', 'medium_large', 'large', '1536x1536', '2048x2048' ];
@@ -62,6 +68,7 @@ class SBSK_Images_Cleaner {
 		foreach ( $groups as $key => $group ) {
 			if ( ! $group['sizes'] ) {
 				unset( $groups[ $key ] );
+
 				continue;
 			}
 
