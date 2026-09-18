@@ -169,6 +169,12 @@ class SBSK_Images_Tools {
 	public static function ajax_count() {
 		self::guard();
 		self::forget_run();
+
+		// A scan answers for the site as it is now, so the mention index is rebuilt
+		// rather than reused: content deleted since the last scan would otherwise
+		// still look like a use.
+		require_once __DIR__ . '/class-sbsk-images-orphans.php';
+		SBSK_Images_Orphans::forget_mentions();
 		wp_send_json_success( self::summary() );
 	}
 
@@ -451,6 +457,8 @@ class SBSK_Images_Tools {
 		}
 
 		require_once __DIR__ . '/class-sbsk-images-orphans.php';
+
+		SBSK_Images_Orphans::forget_mentions();
 
 		$found = SBSK_Images_Orphans::unaccounted();
 

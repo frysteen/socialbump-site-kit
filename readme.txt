@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.4
+Stable tag: 1.1.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.5 =
+* Fixed files being held back as in use when the thing referring to them had already been deleted. The check now reads the site fresh at the start of each scan, and says a file is in use only when it can point at what is using it.
+
 = 1.1.4 =
 * Scanning is much faster on sites with a lot of orphaned files. Checking whether a file is still used now reads the site content once instead of searching the database separately for every file, which turned a minute long scan into well under a second.
 

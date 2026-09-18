@@ -532,9 +532,22 @@ class SBSK_Images_Orphans {
 			}
 		}
 
-		// Mentioned but not found by the targeted queries: still in use, and
-		// saying so without a name beats saying nothing.
-		return $found ? $found : [ __( 'site content', 'sb-site-kit' ) ];
+		// Term and user meta are not in the index, so they are only looked at when
+		// nothing else matched.
+		if ( ! $found ) {
+			foreach ( [ $wpdb->termmeta => 'term', $wpdb->usermeta => 'user' ] as $table => $what ) {
+				$hit = $wpdb->get_var( $wpdb->prepare( "SELECT meta_key FROM {$table} WHERE meta_value LIKE %s LIMIT 1", $like ) );
+
+				if ( $hit ) {
+					$found[] = sprintf( '%1$s (%2$s)', $hit, $what );
+				}
+			}
+		}
+
+		// Nothing found means nothing found. Saying it is in use anyway, because the
+		// index said the name appeared somewhere, held files back over a mention
+		// that had since been deleted and the index had not caught up.
+		return $found;
 	}
 
 	/** references() for a batch. The lookup is per name, so this is a loop. */

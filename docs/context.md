@@ -373,6 +373,15 @@ a fifth of a second. Batching the names into one OR'd query does not help,
 because the LIKEs still scan; reading the content once is the only fix. Measured
 on doogood.com.au: 64s to 0.24s, plus 0.28s to build the index, same answers.
 
+The index is rebuilt at the start of every scan, not reused from the transient,
+because a scan answers for the site as it is now: content deleted since the last
+scan otherwise still looked like a use. The ten minute hold only covers the
+deletion that follows a scan. And when the targeted queries find nothing, the
+answer is nothing: an earlier version said site content instead, on the grounds
+that the index had seen the name somewhere, which held files back over a mention
+that had already been deleted. Term and user meta are not indexed, so they are
+checked directly when nothing else matches.
+
 Image optimisers keep a record of every file they have compressed, which
 mentions the file without using it. WPvivid's stopped a plainly stale thumbnail
 being deleted. Those meta keys are in bookkeeping_keys(), filterable, and both
