@@ -62,27 +62,46 @@ class SBSK_Images_Rebuild {
 	 * WordPress will not upscale an image to fill a larger size.
 	 */
 	/**
-	 * The sizes this attachment genuinely has.
+	 * Sizes this attachment has: the file is named, it is on disk, and it is
+	 * still the size the registration asks for.
 	 *
-	 * Metadata is not proof. A size can be listed and its file long gone: deleted
-	 * by hand, lost in a migration, or cleared when the size was switched off and
-	 * left behind in the metadata when it was switched back on. Trusting the list
-	 * alone made the scan report nothing to build while the file was plainly
-	 * absent, so every entry is checked against the disk.
+	 * That last test matters. Change a theme size from 270 x 400 to 400 x 600
+	 * and every image keeps a real file at the old dimensions, so asking only
+	 * whether the file exists says nothing needs doing, for ever. The old files
+	 * turn up under leftovers while the size itself never rebuilds. Comparing
+	 * the recorded dimensions with what the size would produce now makes a
+	 * changed size show up as work, which is what a person expects.
 	 */
-	public static function present( $id, array $meta ) {
-		$file = get_attached_file( $id );
-		$base = $file ? trailingslashit( dirname( $file ) ) : '';
-		$have = [];
+	public static function present( $id, array $meta = null ) {
+		$meta   = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
+		$file   = get_attached_file( $id );
+		$sizes  = self::all_wanted();
+		$width  = isset( $meta['width'] ) ? (int) $meta['width'] : 0;
+		$height = isset( $meta['height'] ) ? (int) $meta['height'] : 0;
+		$have   = [];
+
+		if ( ! $file ) {
+			return $have;
+		}
+
+		$folder = trailingslashit( dirname( $file ) );
 
 		foreach ( (array) ( $meta['sizes'] ?? [] ) as $name => $size ) {
-			if ( empty( $size['file'] ) ) {
+			if ( empty( $size['file'] ) || ! file_exists( $folder . $size['file'] ) ) {
 				continue;
 			}
 
-			if ( $base === '' || file_exists( $base . $size['file'] ) ) {
-				$have[] = $name;
+			// A size nobody registers any more is not our business here; stale()
+			// deals with those.
+			if ( isset( $sizes[ $name ] ) && $width && $height ) {
+				$want = image_resize_dimensions( $width, $height, (int) $sizes[ $name ]['width'], (int) $sizes[ $name ]['height'], ! empty( $sizes[ $name ]['crop'] ) );
+
+				if ( $want && ( (int) $size['width'] !== (int) $want[4] || (int) $size['height'] !== (int) $want[5] ) ) {
+					continue;
+				}
 			}
+
+			$have[] = $name;
 		}
 
 		return $have;

@@ -276,6 +276,13 @@ run logs every image, because there the skipped ones are the interesting part.
   when the result would be the original, and hid the cropped sizes WordPress
   does make from a short source, such as 600 x 466 for a 600 x 600 crop of a
   1200 x 466 image. Ask WordPress; do not restate its rules.
+- present() counts a size as there only when the file exists AND its recorded
+  dimensions still match what the size would produce now. Checking existence
+  alone meant changing a size's dimensions was invisible: every image kept a
+  real file at the old size, so nothing ever showed as needing a rebuild, while
+  the old files turned up under leftovers. Changing staff_entry from 270 x 400
+  to 400 x 600 on doogood.com.au left 370 entries at the old size and a scan
+  reporting no work.
 - log_item() returns one list of rows, made and skipped together, smallest
   size first, so the log reads as the set of sizes rather than two lists stuck
   end to end.
