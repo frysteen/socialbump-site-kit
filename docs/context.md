@@ -36,7 +36,7 @@ switched on gets its own page in the menu.
 | Images | Image sizes, tidy file names and alt text on upload |
 | Image Cleaner | Missing thumbnails, old sizes, orphaned files, and the sizes panel in the media library. Off by default |
 | WooCommerce | Corrections and tweaks, listed below |
-| Admin Settings | Block admin access, hide the front end toolbar, SocialBUMP admin colours, ACF post type menu icons |
+| Admin Settings | Block admin access, hide the front end toolbar, the SocialBUMP admin colour scheme, ACF post type menu icons |
 
 The WooCommerce group only appears when WooCommerce is active, and its card greys
 out and cannot be switched on without it. The modules in it:
@@ -78,7 +78,7 @@ Default says whether a fresh install has it on.
 | Shortcodes In Excerpts | off | Runs shortcodes written into an excerpt instead of printing them as text |
 | Force Gutenberg Page Refresh on Save | off | Refreshes the editor once a save has finished, so you see what was actually saved |
 | Images | on | The standard image sizes, plus tidy titles and alt text on upload, and the rebuild tools |
-| SocialBUMP Admin Colours | on | Adds the SocialBUMP admin colour scheme, chosen under Users, Profile. Based on Midnight with our palette in place of the red |
+| SocialBUMP Admin Colour Scheme | on | Adds the SocialBUMP admin colour scheme, chosen under Users, Profile. Based on Midnight with our palette in place of the red |
 | Hide Toolbar On The Front End | on | Tick the roles that lose the front end toolbar. Administrators keep their own profile setting |
 | Block Admin Access | off | Sends the ticked roles back to the front end if they open wp-admin. Administrators are never affected |
 | Fix ACF CPT SVG Icons | off | Makes SVG menu icons on post types created in ACF behave like the rest of the admin menu: same size, and they change colour on hover and when active. Icons from other plugins are left alone |
@@ -390,6 +390,20 @@ decision is made: untick Services and you want its FAQ content gone, not a list
 of eleven posts. Each group opens to the posts inside it for the times you want
 only some.
 
+There are two ways a post type stops offering the field, and both have to
+count. Untick it here, and repeater_types no longer holds it. Untick it under
+Post Types for Add-ons, and repeater_types still holds it: the saved FAQ
+settings are not rewritten when the site wide list changes, and would only
+catch up the next time someone saves this page. So everything that asks where
+a field applies goes through SBSK_FAQ::offered(), which takes a saved list and
+returns the part of it still on offer site wide: the field group registration,
+the schema output, and the leftovers scan, for the repeater and for every
+source. Without it the field carried on appearing on a post type the site said
+it did not offer, and the content on it never showed up in the cleanup panel.
+With no site wide list to check against, offered() hands the saved list back
+untouched, because an empty answer there would switch every FAQ field off at
+once.
+
 Field names are remembered in sbsk_faq_fields when the settings save, so a
 source deleted from the settings can still be found. forget() removes the count
 row, every sub field row and the hidden key row beside each, because deleting
@@ -406,6 +420,11 @@ Worth knowing: Google stopped showing FAQ rich results for most sites in August
 2023, keeping them for well known health and government sources. The markup is
 still correct and still read by other things, so this is not wasted, but it will
 not put questions under a search result the way it used to.
+
+Under the repeater's post type list sits one line saying where to change which
+post types are offered, linking to the Post Types for Add-ons card on Admin
+Settings by its anchor. Without it the list reads as everything the site has,
+and a type someone unticked there looks like a fault here.
 
 #### Post types
 
@@ -426,10 +445,31 @@ sbsk_post_types() returns what is left, and each feature keeps its own choice
 from within it: FAQ Schema might pick post and service while something else
 picks page only.
 
-The card has no on/off switch, which needed three small changes: in_group()
+The card takes the full width of the page and is rendered after every other
+card in its group, because the list runs to fifty or more post types on a busy
+site and is unreadable in one column of a four column grid. A module asks for
+that with wide in its module.php; render_group() holds those back and draws
+them last, and .sbsk-card--wide spans every column. Every card now carries
+id="sbsk-module-<id>" so it can be linked to, with scroll-margin-top on the
+wide one so the admin bar does not sit over the heading.
+
+Select all and Select none sit above the list. Any multicheck field can have
+them with select_all on the field. They are buttons rather than submits and
+are marked data-sb-always-on, so the unsaved changes reminder never mistakes
+one for the save button, and they set each tick with a real DOM change event:
+save-state.js listens with addEventListener and a jQuery trigger never reaches
+it. Unticking everything is safe here despite the inverted storage, because an
+absent multicheck sanitises to nothing ticked, which inverts to every type
+hidden, which is what was asked for.
+
+The card has no on/off switch, which needed four small changes: in_group()
 now includes always-on modules so their settings have somewhere to appear,
 render_card() leaves out the toggle for them rather than showing one stuck on,
-and save() skips writing a state they do not have. render_field() also stopped
+save() skips writing a state they do not have, and the feature list on the
+Modules page treats always as on. That last one was missed: the list asked for
+a stored state, found none, and showed the module greyed out as though it were
+switched off, on a card with nothing to switch. page_order() puts wide modules
+last in that list too, so it reads in the same order as the page it links to. render_field() also stopped
 casting an array default to a string, which warned on every multicheck.
 
 #### Find leftover thumbnails (the deep scan)
@@ -610,7 +650,7 @@ The list of sizes appears in two places, and they are not the same mechanism.
 
 ### Admin Settings
 
-**SocialBUMP Admin Colours.** Registers a colour scheme on admin_init, based on
+**SocialBUMP Admin Colour Scheme.** Registers a colour scheme on admin_init, based on
 Midnight with the SocialBUMP palette in place of the red, chosen per user under
 Users then Profile. The force setting applies it to everyone by filtering
 get_user_option_admin_color, which is how a client site ends up looking the same
@@ -727,6 +767,8 @@ features, and a boot callback that does the work.
   never leaves a module pointing at a file that is not there.
 - A module with its own settings page provides admin_page with a title,
   description and render callback.
+- wide puts the card across the full width of the page, after every other card
+  in its group. For a list too long to read in a column.
 - A fatal inside one module is caught, so it cannot take the site down.
 
 ## Images, the one with teeth
@@ -829,8 +871,9 @@ mixed versions still works.
 
 SocialBUMP_Cards and module-cards.js give a page of cards a chevron to collapse
 each to its title (the title toggles too), Collapse all, Expand all and Collapse
-disabled links above the grid, and a Reorder Cards button below it that opens a
-list to drag. Order and collapsed state are per user, in user meta, alphabetical
+disabled links above the grid, and a Reorder Cards button beside the heading, on
+the right, that opens a list to drag. It used to sit below the grid, directly
+above Save changes, where it was hit by mistake on the way to saving. Order and collapsed state are per user, in user meta, alphabetical
 until changed, and saved over AJAX as they change, never through the form. The
 saved order is meant to drive the menu, the tab bar and the admin bar as well,
 and saving one drops that menu's entry from ASE's submenu order. Both files are
@@ -973,7 +1016,12 @@ loads. A token has no business on a client site.
 If you add anything else that only the hub should know, delete it there too.
 ### Unsaved changes, and the save button
 
-Any form marked data-sb-dirty is watched. The save button sits disabled reading
+Any form marked data-sb-dirty is watched, and every one of them also carries
+autocomplete="off". Without it a browser puts unsaved values back into the
+fields when the page is reloaded past the warning, and it does so after the
+page has parsed: the button flickers while the script and the form disagree
+about the baseline, and worse, the edits sit there on screen under a button
+saying there is nothing to save. Reloading should show what is saved. The save button sits disabled reading
 Nothing to save until something changes, then wakes up with its own wording and
 an amber reminder appears top right and follows you down the page. Put the change
 back the way it was and both go quiet. Leaving with something unsaved warns you.
@@ -995,8 +1043,21 @@ Reset to defaults sitting above Save changes, and the reminder used to submit
 whichever came first, so clicking it reset the sizes rather than saving them.
 Worth remembering when adding any second submit to a form.
 
-Styling: .sb-save--clean is a grey outline on transparent, .sb-save--dirty is
-pale yellow with an amber border, matching the reminder. Both selectors lead with
+Styling: .sb-save--clean is a grey outline on transparent, .sb-save--dirty fills
+with the admin colour scheme accent, white text, so the thing to press is the
+only solid button on the page. The accent is taken down a shade with
+color-mix( in srgb, var(--prefix-accent) 76%, #000 ): the SocialBUMP green is
+too bright at full strength and every other scheme reads better slightly
+darker. The flat var() is declared first as a fallback. The reminder stays pale
+yellow: it is a notice, not a button, and the two should not read as the same
+thing.
+
+Render the button wearing sb-save--clean already, by passing
+'primary sb-save--clean' as submit_button()'s second argument. The script is
+enqueued in the footer, so until it runs the button is an ordinary live primary
+button and flashed the accent colour on every page load before settling to
+Nothing to save. It is not rendered disabled, so a page whose JavaScript fails
+can still be saved. Both selectors lead with
 .wp-core-ui and .button, because WordPress styles disabled and primary buttons
 with important and would otherwise win.
 
@@ -1013,6 +1074,13 @@ with important and would otherwise win.
   something missing. The left edge carries the accent when live.
 - Pills: prefix-status__pill, is-good green, is-stale amber. An amber one that
   can be acted on is a link, and clicking it does the thing it describes.
+- Text toggle links: sb-toggle on the link, sb-toggles on a pair's wrapper.
+  Select all and Select none, Collapse all, Expand all, Collapse disabled, the
+  all and none pairs on the Image Cleaner: all the same look, all defined once,
+  so a new one never has to be styled again. The colour is the admin scheme
+  accent taken down to 72 per cent against black, and hover goes to 42, which is
+  a change you can actually see on any scheme. A wrapper sits its pair at the
+  right, where the Modules links have always been.
 - Menu icon: the SocialBUMP exclamation, shared by all four items through
   SocialBUMP_Overview::brand_icon(). Each plugin positions its menu next to the
   others rather than at a fixed spot.

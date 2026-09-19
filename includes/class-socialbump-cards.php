@@ -110,11 +110,11 @@ class SocialBUMP_Cards {
 		}
 
 		return '<div class="sb-cards__tools sb-cards__tools--links" data-sb-cards-tools="' . esc_attr( $key ) . '">'
-			. '<button type="button" class="button-link" data-sb-cards-collapse>' . esc_html__( 'Collapse all' ) . '</button>'
+			. '<button type="button" class="button-link sb-toggle" data-sb-cards-collapse>' . esc_html__( 'Collapse all' ) . '</button>'
 			. '<span aria-hidden="true">|</span>'
-			. '<button type="button" class="button-link" data-sb-cards-expand>' . esc_html__( 'Expand all' ) . '</button>'
+			. '<button type="button" class="button-link sb-toggle" data-sb-cards-expand>' . esc_html__( 'Expand all' ) . '</button>'
 			. '<span aria-hidden="true">|</span>'
-			. '<button type="button" class="button-link" data-sb-cards-collapse-off>' . esc_html__( 'Collapse disabled' ) . '</button>'
+			. '<button type="button" class="button-link sb-toggle" data-sb-cards-collapse-off>' . esc_html__( 'Collapse disabled' ) . '</button>'
 			. '</div>';
 	}
 

@@ -124,7 +124,7 @@ class SBSK_Images_Cleaner {
 	private static function render_sizes() {
 		$chosen = self::chosen();
 
-		echo '<form method="post" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<form method="post" autocomplete="off" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		echo '<input type="hidden" name="action" value="sbsk_save_cleaner_sizes">';
 		wp_nonce_field( 'sbsk_save_cleaner_sizes' );
 		echo '<section class="sbsk-section sbsk-cleaner__sizes" id="sbsk-cleaner-sizes">';
@@ -135,7 +135,7 @@ class SBSK_Images_Cleaner {
 		foreach ( self::size_groups() as $key => $group ) {
 			echo '<div class="sbsk-sizegroup" data-sizegroup="' . esc_attr( $key ) . '">';
 			echo '<div class="sbsk-sizegroup__head"><strong>' . esc_html( $group['title'] ) . '</strong>';
-			echo '<span><button type="button" class="button-link" data-sb-always-on data-sizes-all>' . esc_html__( 'all', 'sb-site-kit' ) . '</button> | <button type="button" class="button-link" data-sb-always-on data-sizes-none>' . esc_html__( 'none', 'sb-site-kit' ) . '</button></span></div>';
+			echo '<span><button type="button" class="button-link sb-toggle" data-sb-always-on data-sizes-all>' . esc_html__( 'all', 'sb-site-kit' ) . '</button> | <button type="button" class="button-link sb-toggle" data-sb-always-on data-sizes-none>' . esc_html__( 'none', 'sb-site-kit' ) . '</button></span></div>';
 
 			foreach ( $group['sizes'] as $name => $size ) {
 				$dims = $size['width'] ? number_format_i18n( $size['width'] ) : '';
@@ -152,7 +152,7 @@ class SBSK_Images_Cleaner {
 		}
 
 		echo '<div class="sbsk-cleaner__sizes-foot">';
-		echo '<span><button type="button" class="button-link" data-sb-always-on id="sbsk-sizes-all">' . esc_html__( 'Select all', 'sb-site-kit' ) . '</button> | <button type="button" class="button-link" data-sb-always-on id="sbsk-sizes-none">' . esc_html__( 'Select none', 'sb-site-kit' ) . '</button></span>';
+		echo '<span><button type="button" class="button-link sb-toggle" data-sb-always-on id="sbsk-sizes-all">' . esc_html__( 'Select all', 'sb-site-kit' ) . '</button> | <button type="button" class="button-link sb-toggle" data-sb-always-on id="sbsk-sizes-none">' . esc_html__( 'Select none', 'sb-site-kit' ) . '</button></span>';
 		echo '<button type="submit" class="button sb-save--clean" id="sbsk-sizes-save" data-sb-label-dirty="' . esc_attr__( 'Save sizes', 'sb-site-kit' ) . '" disabled>' . esc_html__( 'Save sizes', 'sb-site-kit' ) . '</button>';
 		echo '</div>';
 		echo '</section>';

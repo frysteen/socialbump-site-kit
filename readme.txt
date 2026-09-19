@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.11
+Stable tag: 1.1.12
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,19 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.12 =
+* The Post Types for Add-ons list now has the full width of the page and sits below the other cards on Admin Settings, so a site with a lot of post types can actually read it. It has Select all and Select none above the list too.
+* FAQ Settings now says where to change which post types are on offer, with a link straight to that setting on the Admin Settings page.
+* On the Modules page, Post Types for Add-ons now shows as on, since it has no switch and is always running, and it sits last in the list to match the page it belongs to.
+* Reorder Cards has moved up beside the Modules heading, on the right. It used to sit just above Save changes, which made it easy to hit by mistake.
+* The Save changes button now fills with your admin colour scheme once there is something to save, instead of the pale yellow. The unsaved changes reminder stays yellow, since it is a notice rather than a button.
+* The Save changes button no longer flashes as a live button for a moment when a settings page loads. It now starts in its resting state.
+* Settings forms no longer hold on to unsaved changes when you reload the page past the warning. The page now comes back showing what is actually saved, rather than your unsaved edits sitting there looking saved.
+* Select all and Select none, Collapse all and the other text links now all look the same and sit in the same place, with a hover colour you can actually see.
+* FAQ content left behind on a post type is now found whichever way the post type was switched off: by unticking it on the FAQ Settings page, or by unticking it under Post Types for Add-ons. Before, the second way left the content invisible to the cleanup tool, and the FAQ field kept appearing on that post type as though nothing had changed.
+* Post Types for Addons is now spelled Post Types for Add-ons. Nothing else about it has changed.
+* SocialBUMP Admin Colours is now called SocialBUMP Admin Colour Scheme, which is what it actually is. Nothing about how it works has changed, and the scheme you have chosen under your profile is untouched.
+
 = 1.1.11 =
 * New under Admin Settings: Fix ACF CPT SVG Icons, which makes SVG menu icons on post types created in ACF behave like the rest of the admin menu icons. It has moved here from SocialBUMP Bricks Tweaks, since it was never a Bricks feature. Off by default.
 

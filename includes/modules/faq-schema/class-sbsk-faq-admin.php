@@ -215,10 +215,10 @@ class SBSK_FAQ_Admin {
 		}
 
 		if ( ! $types ) {
-			echo '<div class="notice notice-warning"><p>' . esc_html__( 'No post types are available. Tick some under Admin Settings, Post Types for Addons.', 'sb-site-kit' ) . '</p></div>';
+			echo '<div class="notice notice-warning"><p>' . esc_html__( 'No post types are available. Tick some under Admin Settings, Post Types for Add-ons.', 'sb-site-kit' ) . '</p></div>';
 		}
 
-		echo '<form method="post" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<form method="post" autocomplete="off" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		echo '<input type="hidden" name="action" value="sbsk_faq_save">';
 		wp_nonce_field( 'sbsk_faq_save' );
 
@@ -240,7 +240,22 @@ class SBSK_FAQ_Admin {
 			);
 		}
 
-		echo '</span></div>';
+		echo '</span>';
+
+		// Which post types are on offer here is decided once, on Admin Settings,
+		// rather than per feature. Say so and link straight to that card, or the
+		// list looks like everything the site has and a missing type looks like a
+		// fault.
+		printf(
+			'<p class="sbsk-field__desc">%s</p>',
+			sprintf(
+				/* translators: %s: link to the Admin Settings page */
+				esc_html__( 'To manage which post types can be used with this feature, please go to the %s page.', 'sb-site-kit' ),
+				'<a href="' . esc_url( admin_url( 'admin.php?page=' . SBSK_Settings::group_page_slug( 'admin' ) ) . '#sbsk-module-post-types' ) . '">' . esc_html__( 'Admin Settings', 'sb-site-kit' ) . '</a>'
+			)
+		);
+
+		echo '</div>';
 
 		// The cleanup tool lives with the repeater, below a divider: it is about
 		// content left behind by the ticks just above it. It runs on load and stays
@@ -268,7 +283,7 @@ class SBSK_FAQ_Admin {
 		echo '</div></div>';
 		echo '</section>';
 
-		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ) );
+		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ), 'primary sb-save--clean' );
 		echo '</form>';
 
 		self::template( $types );

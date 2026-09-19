@@ -216,6 +216,18 @@ class SBSK_Settings {
 
 					// An inverted list stores what is NOT ticked, so anything added to
 					// the site later arrives ticked without anyone editing this page.
+					// A long list is tedious to clear by hand, so it can carry its own
+					// all and none. Both are buttons rather than submits, marked
+					// always on so the unsaved changes reminder never mistakes one for
+					// the save button.
+					if ( ! empty( $field['select_all'] ) ) {
+						printf(
+							'<span class="sbsk-checklist__tools sb-toggles"><button type="button" class="button-link sb-toggle" data-sb-always-on data-sbsk-check="all">%s</button><span aria-hidden="true">|</span><button type="button" class="button-link sb-toggle" data-sb-always-on data-sbsk-check="none">%s</button></span>',
+							esc_html__( 'Select all', 'sb-site-kit' ),
+							esc_html__( 'Select none', 'sb-site-kit' )
+						);
+					}
+
 					echo '<span class="sbsk-checklist">';
 
 					foreach ( SBSK_Modules::field_options( $field ) as $option => $option_label ) {
@@ -364,10 +376,18 @@ class SBSK_Settings {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'sb-site-kit' ) . '</p></div>';
 		}
 
-		echo '<form method="post" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<form method="post" autocomplete="off" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		echo '<input type="hidden" name="action" value="sbsk_save_groups">';
 		wp_nonce_field( 'sbsk_save_groups' );
-		echo '<section class="sbsk-section"><div class="sbsk-section__head"><h2>' . esc_html__( 'Modules', 'sb-site-kit' ) . '</h2><p>' . esc_html__( 'Each one switched on adds its own page to the menu. Reorder puts them in the order you want, here and in the menus, and each one collapses to its title.', 'sb-site-kit' ) . '</p></div>';
+		// Reorder sits up here with the heading. Below the grid it was too easy to
+		// hit on the way to Save changes.
+		echo '<section class="sbsk-section"><div class="sbsk-section__head sbsk-section__head--tools"><div><h2>' . esc_html__( 'Modules', 'sb-site-kit' ) . '</h2><p>' . esc_html__( 'Each one switched on adds its own page to the menu. Reorder puts them in the order you want, here and in the menus, and each one collapses to its title.', 'sb-site-kit' ) . '</p></div>';
+
+		if ( class_exists( 'SocialBUMP_Cards' ) ) {
+			echo SocialBUMP_Cards::toolbar( 'sbsk_groups', 'reorder' );
+		}
+
+		echo '</div>';
 
 		// By name until the user drags them; then in their order, new ones by name at the end.
 		$titles = [];
@@ -386,7 +406,10 @@ class SBSK_Settings {
 
 		foreach ( $ordered as $group ) {
 			$section = $sections[ $group ];
-			$modules = SBSK_Modules::instance()->in_group( $group );
+
+			// Listed in the order the group's own page draws them, so a wide card is
+			// last in both places.
+			$modules = $this->page_order( SBSK_Modules::instance()->in_group( $group ) );
 
 			if ( ! $modules ) {
 				continue;
@@ -411,7 +434,11 @@ class SBSK_Settings {
 			$card .= '<ul class="sbsk-features">';
 
 			foreach ( $modules as $module_id => $module ) {
-				$lit = $on && ! empty( $states_of[ $module_id ] ) && ! SBSK_Modules::instance()->missing( $module_id ) && ! SBSK_Modules::instance()->unavailable( $module_id );
+				// A module with no switch is on whenever its group is: there is no state
+				// stored for it, so asking for one left it looking switched off with no
+				// way to switch it on.
+				$always = ! empty( $module['always'] );
+				$lit    = $on && ( $always || ! empty( $states_of[ $module_id ] ) ) && ! SBSK_Modules::instance()->missing( $module_id ) && ! SBSK_Modules::instance()->unavailable( $module_id );
 
 				// A module can report its own switches, so the list shows what is really on.
 				$parts = ( ! empty( $module['features'] ) && is_callable( $module['features'] ) ) ? (array) call_user_func( $module['features'] ) : [];
@@ -439,11 +466,10 @@ class SBSK_Settings {
 		echo '</div>';
 
 		if ( class_exists( 'SocialBUMP_Cards' ) ) {
-			echo SocialBUMP_Cards::toolbar( 'sbsk_groups', 'reorder' );
 		}
 
 		echo '</section>';
-		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ) );
+		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ), 'primary sb-save--clean' );
 		echo '</form></div>';
 	}
 
@@ -474,7 +500,7 @@ class SBSK_Settings {
 			return;
 		}
 
-		echo '<form method="post" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<form method="post" autocomplete="off" data-sb-dirty action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		echo '<input type="hidden" name="action" value="sbsk_save">';
 		echo '<input type="hidden" name="sbsk_group" value="' . esc_attr( $group ) . '">';
 		wp_nonce_field( 'sbsk_save' );
@@ -482,13 +508,36 @@ class SBSK_Settings {
 
 		$states = SBSK_Modules::instance()->get_states();
 
-		foreach ( $modules as $id => $module ) {
+		// Wide cards last, the same order the Modules page lists them in.
+		foreach ( $this->page_order( $modules ) as $id => $module ) {
 			$this->render_card( $id, $module, $states );
 		}
 
 		echo '</div>';
-		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ) );
+		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ), 'primary sb-save--clean' );
 		echo '</form></div>';
+	}
+
+	/**
+	 * Modules in the order a page draws them: wide cards last.
+	 *
+	 * A wide card spans every column of the grid, so it can only sit at the
+	 * bottom. The Modules page lists the same modules and has to agree with it.
+	 */
+	private function page_order( $modules ) {
+		$normal = [];
+		$wide   = [];
+
+		foreach ( $modules as $id => $module ) {
+			if ( ! empty( $module['wide'] ) ) {
+				$wide[ $id ] = $module;
+				continue;
+			}
+
+			$normal[ $id ] = $module;
+		}
+
+		return $normal + $wide;
 	}
 
 	/** One feature card, with its switch, notes and any settings of its own. */
@@ -501,7 +550,7 @@ class SBSK_Settings {
 		// A feature with no switch is a settings card: it is always on, so a toggle
 		// stuck in the on position would only invite someone to try turning it off.
 		printf(
-			'<div class="sbsk-card%1$s%2$s"><div class="sbsk-card__head"><h3>%3$s</h3>%4$s</div>',
+			'<div class="sbsk-card%1$s%2$s%5$s" id="sbsk-module-%6$s"><div class="sbsk-card__head"><h3>%3$s</h3>%4$s</div>',
 			$on ? ' is-on' : '',
 			( $missing || $blocked ) ? ' is-unavailable' : '',
 			esc_html( $module['title'] ),
@@ -511,7 +560,9 @@ class SBSK_Settings {
 				checked( $on, true, false ),
 				disabled( (bool) $missing || (bool) $blocked, true, false ),
 				esc_html( $module['title'] )
-			)
+			),
+			empty( $module['wide'] ) ? '' : ' sbsk-card--wide',
+			esc_attr( sanitize_key( $id ) )
 		);
 
 		if ( $blocked ) {
@@ -981,7 +1032,7 @@ class SBSK_Settings {
 			<?php if ( empty( $modules ) ) : ?>
 				<p><?php esc_html_e( 'No modules found yet.', 'sb-site-kit' ); ?></p>
 			<?php else : ?>
-				<form method="post" data-sb-dirty action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<form method="post" autocomplete="off" data-sb-dirty action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="sbsk_save">
 					<?php wp_nonce_field( 'sbsk_save' ); ?>
 
@@ -1053,7 +1104,7 @@ class SBSK_Settings {
 						</section>
 					<?php endforeach; ?>
 
-					<?php submit_button( esc_html__( 'Save changes', 'sb-site-kit' ) ); ?>
+					<?php submit_button( esc_html__( 'Save changes', 'sb-site-kit' ), 'primary sb-save--clean' ); ?>
 				</form>
 			<?php endif; ?>
 

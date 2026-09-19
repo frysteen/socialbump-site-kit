@@ -810,5 +810,23 @@
 		$( '.sbsk-card .sbsk-switch input' ).on( 'change', function () {
 			$( this ).closest( '.sbsk-card' ).toggleClass( 'is-on', this.checked );
 		} );
+
+		// Select all and Select none on a long checklist. The tick has to be set
+		// with a real DOM change event: save-state.js listens with
+		// addEventListener, which a jQuery trigger never reaches, and the save
+		// button would sit disabled while the ticks plainly changed.
+		$( document ).on( 'click', '[data-sbsk-check]', function () {
+			var wanted = $( this ).data( 'sbsk-check' ) === 'all';
+			var $field = $( this ).closest( '.sbsk-field' );
+
+			$field.find( '.sbsk-checklist input[type="checkbox"]' ).each( function () {
+				if ( this.disabled || this.checked === wanted ) {
+					return;
+				}
+
+				this.checked = wanted;
+				this.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+			} );
+		} );
 	} );
 } )( jQuery );

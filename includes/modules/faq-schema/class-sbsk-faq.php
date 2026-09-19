@@ -88,6 +88,29 @@ class SBSK_FAQ {
 		return function_exists( 'sbsk_post_types' ) ? sbsk_post_types() : [];
 	}
 
+	/**
+	 * Of a saved list of post types, the ones still on offer site wide.
+	 *
+	 * Post Types for Add-ons decides what the whole plugin offers, and the saved
+	 * FAQ settings are not rewritten when it changes: a type unticked there stays
+	 * in repeater_types until someone saves this page again. Everything that
+	 * asks where a field applies has to go through here, or the field carries on
+	 * being registered on a post type the site says it does not offer, and the
+	 * content on it never shows up as left over.
+	 *
+	 * With no site wide list to check against, the saved list is returned as it
+	 * is. An empty answer there would switch every field off at once.
+	 */
+	public static function offered( $types ) {
+		$all = self::attachable();
+
+		if ( ! $all ) {
+			return array_values( (array) $types );
+		}
+
+		return array_values( array_intersect( (array) $types, array_keys( $all ) ) );
+	}
+
 	/** The relationship field name for a source, with its fallback. */
 	public static function relation_field( $source ) {
 		if ( ! empty( $source['relation_field'] ) ) {
@@ -111,12 +134,14 @@ class SBSK_FAQ {
 
 		$settings = self::settings();
 
-		if ( $settings['repeater_on'] && $settings['repeater_types'] ) {
+		$repeater_types = self::offered( $settings['repeater_types'] );
+
+		if ( $settings['repeater_on'] && $repeater_types ) {
 			acf_add_local_field_group(
 				[
 					'key'      => 'group_sbsk_faq_questions',
 					'title'    => __( 'FAQ Questions', 'sb-site-kit' ),
-					'location' => self::locations( $settings['repeater_types'] ),
+					'location' => self::locations( $repeater_types ),
 					'fields'   => [
 						[
 							'key'          => 'field_sbsk_faq_questions',
@@ -156,7 +181,9 @@ class SBSK_FAQ {
 		}
 
 		foreach ( $settings['sources'] as $index => $source ) {
-			if ( empty( $source['post_type'] ) || empty( $source['attach_to'] ) ) {
+			$attach_to = self::offered( isset( $source['attach_to'] ) ? $source['attach_to'] : [] );
+
+			if ( empty( $source['post_type'] ) || ! $attach_to ) {
 				continue;
 			}
 
@@ -166,7 +193,7 @@ class SBSK_FAQ {
 				[
 					'key'      => 'group_sbsk_faq_related_' . $index,
 					'title'    => sprintf( /* translators: %s: post type label */ __( 'Related %s', 'sb-site-kit' ), self::post_type_label( $source['post_type'] ) ),
-					'location' => self::locations( (array) $source['attach_to'] ),
+					'location' => self::locations( $attach_to ),
 					'fields'   => [
 						[
 							'key'        => 'field_sbsk_faq_related_' . $index,
@@ -236,7 +263,7 @@ class SBSK_FAQ {
 		$pairs    = [];
 		$type     = get_post_type( $post_id );
 
-		if ( $settings['repeater_on'] && in_array( $type, $settings['repeater_types'], true ) && function_exists( 'have_rows' ) ) {
+		if ( $settings['repeater_on'] && in_array( $type, self::offered( $settings['repeater_types'] ), true ) && function_exists( 'have_rows' ) ) {
 			$rows = get_field( self::REPEATER, $post_id );
 
 			foreach ( (array) $rows as $row ) {
@@ -252,7 +279,7 @@ class SBSK_FAQ {
 		}
 
 		foreach ( $settings['sources'] as $source ) {
-			if ( empty( $source['post_type'] ) || ! in_array( $type, (array) $source['attach_to'], true ) ) {
+			if ( empty( $source['post_type'] ) || ! in_array( $type, self::offered( isset( $source['attach_to'] ) ? $source['attach_to'] : [] ), true ) ) {
 				continue;
 			}
 
@@ -350,7 +377,7 @@ class SBSK_FAQ {
 
 		// Where each field is still offered. Anything outside these lists is a
 		// leftover.
-		$wanted[ self::REPEATER ] = ! empty( $settings['repeater_on'] ) ? (array) $settings['repeater_types'] : [];
+		$wanted[ self::REPEATER ] = ! empty( $settings['repeater_on'] ) ? self::offered( $settings['repeater_types'] ) : [];
 
 		if ( ! empty( $settings['sources_on'] ) ) {
 			foreach ( (array) $settings['sources'] as $source ) {
@@ -358,7 +385,7 @@ class SBSK_FAQ {
 					continue;
 				}
 
-				$wanted[ self::relation_field( $source ) ] = (array) ( isset( $source['attach_to'] ) ? $source['attach_to'] : [] );
+				$wanted[ self::relation_field( $source ) ] = self::offered( isset( $source['attach_to'] ) ? $source['attach_to'] : [] );
 			}
 		}
 

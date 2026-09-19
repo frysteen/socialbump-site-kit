@@ -5,7 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 return [
 	'id'          => 'admin-colour-scheme',
-	'title'       => __( 'SocialBUMP Admin Colours', 'sb-site-kit' ),
+	'title'       => __( 'SocialBUMP Admin Colour Scheme', 'sb-site-kit' ),
 	'description' => __( 'Adds a SocialBUMP admin colour scheme, picked under Users then Profile. Based on Midnight with the SocialBUMP palette in place of the red.', 'sb-site-kit' ),
 	'section'     => 'admin',
 	'default'     => true,

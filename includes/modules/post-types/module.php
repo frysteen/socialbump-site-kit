@@ -75,10 +75,15 @@ endif;
 
 return [
 	'id'          => 'post-types',
-	'title'       => __( 'Post Types for Addons', 'sb-site-kit' ),
+	'title'       => __( 'Post Types for Add-ons', 'sb-site-kit' ),
 	'description' => __( 'Which post types the rest of Site Kit offers you. Untick anything you never want to see in a feature\'s list. Each feature still keeps its own choice from what is left here.', 'sb-site-kit' ),
 	'section'     => 'admin',
 	'always'      => true,
+
+	// The list runs to dozens of post types on a busy site, so it takes the
+	// full width of the page and sits below the other cards rather than
+	// scrolling on forever inside one column.
+	'wide'        => true,
 
 	/**
 	 * Stored inverted: the list keeps what is unticked, so a post type added by
@@ -91,6 +96,7 @@ return [
 			'invert'  => true,
 			'label'   => __( 'Offer these post types', 'sb-site-kit' ),
 			'options' => 'sbsk_post_type_choices',
+			'select_all' => true,
 			'default' => [],
 		],
 	],

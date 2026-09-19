@@ -224,7 +224,7 @@ class SBSK_Images {
 		$post_url = esc_url( admin_url( 'admin-post.php' ) );
 
 
-		echo '<form method="post" data-sb-dirty action="' . $post_url . '">';
+		echo '<form method="post" autocomplete="off" data-sb-dirty action="' . $post_url . '">';
 		echo '<input type="hidden" name="action" value="sbsk_save_images">';
 		wp_nonce_field( 'sbsk_save_images' );
 
@@ -278,7 +278,7 @@ class SBSK_Images {
 
 		echo '</div>';
 
-		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ) );
+		submit_button( esc_html__( 'Save changes', 'sb-site-kit' ), 'primary sb-save--clean' );
 		echo '</form>';
 	}
 
