@@ -36,7 +36,7 @@ switched on gets its own page in the menu.
 | Images | Image sizes, tidy file names and alt text on upload |
 | Image Cleaner | Missing thumbnails, old sizes, orphaned files, and the sizes panel in the media library. Off by default |
 | WooCommerce | Corrections and tweaks, listed below |
-| Admin Settings | Block admin access, hide the front end toolbar, SocialBUMP admin colours |
+| Admin Settings | Block admin access, hide the front end toolbar, SocialBUMP admin colours, ACF post type menu icons |
 
 The WooCommerce group only appears when WooCommerce is active, and its card greys
 out and cannot be switched on without it. The modules in it:
@@ -81,6 +81,7 @@ Default says whether a fresh install has it on.
 | SocialBUMP Admin Colours | on | Adds the SocialBUMP admin colour scheme, chosen under Users, Profile. Based on Midnight with our palette in place of the red |
 | Hide Toolbar On The Front End | on | Tick the roles that lose the front end toolbar. Administrators keep their own profile setting |
 | Block Admin Access | off | Sends the ticked roles back to the front end if they open wp-admin. Administrators are never affected |
+| Fix ACF CPT SVG Icons | off | Makes SVG menu icons on post types created in ACF behave like the rest of the admin menu: same size, and they change colour on hover and when active. Icons from other plugins are left alone |
 | Fix Default Category Title Bug | on | WooCommerce blanks the default category name, edit link and row actions on Products, Categories. This puts them back |
 | Download Analytics as CSV | off | A Download CSV button on the Analytics reports for the range on screen. WooCommerce normally builds it in the background and emails a link |
 | From Price on Variable Products | off | The lowest price with a label, instead of a range. Loops by default, product page optional |
@@ -627,6 +628,21 @@ through, or half the front end would break for those users. Administrators are
 never affected, deliberately and without an option to change it.
 Settings: roles, and redirect.
 
+**Fix ACF CPT SVG Icons.** A post type created in ACF with an SVG menu icon gets
+an icon that ignores the admin menu colours: wrong size, and it does not change
+on hover or when active. WordPress renders a menu icon given as a file URL as an
+img element, which cannot take the menu's colour. This prints CSS on admin_head
+that hides the img and uses the SVG as a mask instead, so the menu's own text
+colour paints it and it follows hover and current states like a dashicon. Only
+post types created in ACF are touched, and only when their icon is an .svg file,
+so icons from other plugins are left alone. Setting: colour, which applies at
+rest only so hover and the active item keep the menu highlight; a var() with no
+fallback is given currentColor as one, so the icon can never vanish. Needs ACF.
+
+It lived in Bricks Tweaks until September 2026, which was the wrong home: it has
+nothing to do with Bricks. A site that had it on there has to switch it on here,
+since the two plugins keep their own settings and nothing carries across.
+
 ### WooCommerce
 
 The whole group hides when WooCommerce is not active, and every module in it
@@ -696,7 +712,7 @@ per job. The ones with more than one file:
 | excerpt-counter | class plus assets | has to cope with TinyMCE arriving late |
 | woo-analytics-csv | class plus assets | the buttons are injected into a React screen, so the script polls for it |
 
-The rest are a module.php and a single class: admin-access, front-toolbar,
+The rest are a module.php and a single class: admin-access, fix-acf-cpt-svg-icons, front-toolbar,
 excerpt-shortcodes, page-excerpts, and the six other WooCommerce modules.
 
 ## Writing a module
@@ -779,21 +795,23 @@ are the three rules worth reading before you touch it.
 
 ## House rules, shared by all three SocialBUMP plugins
 
-This block is identical in the docs of all three plugins. Change it in one and
-copy it to the other two in the same session. They all live on the hub, so that
+This block is identical in the docs of Site Kit and Bricks Tweaks. Change it in
+one and copy it to the other in the same session. They all live on the hub, so that
 is a two minute job, and the Publishing page warns you when they have drifted.
 
-### The three plugins
+### The two plugins
 
 | Plugin | Folder | Prefix | Menu |
 | --- | --- | --- | --- |
 | SocialBUMP Bricks Tweaks | socialbump-bricks-tweaks | SBBT_ / sbbt_ | SB Bricks Tweaks |
 | SocialBUMP Site Kit | socialbump-site-kit | SBSK_ / sbsk_ | SB Site Kit |
-| SocialBUMP SEO for AI | socialbump-ai-knowledge-exporter | SBAIKE_ / sbaike_ | SB SEO for AI |
 
-SEO for AI was called AI Knowledge Exporter until September 2026. Its folder,
-text domain, option names and GitHub repo still say so, deliberately: renaming
-them would break the update checker and the saved settings on every site.
+SocialBUMP SEO for AI, in socialbump-ai-knowledge-exporter, used to be the third
+and is not any more. It was split off in September 2026: its own admin bar item,
+its own menu, no card on the Hub page, no part in the Hub's update checking or
+its master prompt, and its own copies of everything it used to share. It may go
+on copying from these two. Nothing is shared with it, so nothing done here can
+reach it, and its notes are its own to change.
 
 Which plugin does a job belong in? Needs the Bricks theme, Bricks Tweaks.
 Useful on any site, Site Kit. About what AI crawlers read, SEO for AI.
@@ -803,9 +821,9 @@ Useful on any site, Site Kit. About what AI crawlers read, SEO for AI.
 - includes/class-socialbump-admin-bar.php
 - assets/js/save-state.js
 
-Change one, change all three, then check the md5s match. Both are written so
-that whichever plugin loads first wins and the others stand aside, so a site
-running mixed versions still works.
+Change one, change both, then check the md5s match. Both are written so that
+whichever plugin loads first wins and the other stands aside, so a site running
+mixed versions still works.
 
 ### The Modules page cards
 
@@ -865,7 +883,7 @@ admin_bar_menu priority 200.
 - Each row has a dot: green when there is nothing to do, amber when there is.
   Any amber row makes the SocialBUMP dot amber, so the top of the bar is the
   only thing that needs watching.
-- attention means an update is waiting. SEO for AI also counts stale posts.
+- attention means an update is waiting.
 - The current page is white and bold, never the admin colour scheme accent:
   some accents are unreadable on the dark bar.
 - An action row marked sb-bar-action is-idle looks inactive and ignores hover.
@@ -1085,11 +1103,11 @@ Every plugin has the same shape:
 | includes/class-<pre>-updates.php | the Updates page and the update check |
 | includes/class-<pre>-transfer.php | settings export and import |
 | includes/class-<pre>-docs.php | these notes, and the panel on Publishing |
-| includes/class-socialbump-admin-bar.php | shared, identical in all three |
-| includes/class-socialbump-cards.php | shared: collapsible, reorderable cards. Site Kit has it; the others get it with their Modules pages |
+| includes/class-socialbump-admin-bar.php | shared, identical in both |
+| includes/class-socialbump-cards.php | shared: collapsible, reorderable cards. Both have it, with their Modules pages |
 | assets/js/module-cards.js | shared, goes with the cards class |
 | assets/css/admin.css | everything the admin pages look like |
-| assets/js/save-state.js | shared, identical in all three |
+| assets/js/save-state.js | shared, identical in both |
 | vendor/plugin-update-checker | the updater library, left alone |
 
 ### Working on a plugin from a client site
@@ -1144,8 +1162,11 @@ folder, and anything not carried back to the hub is gone.
 - admin_head has already been sent by the time the admin bar is built, so a
   style hooked only there never appears. Hook the footer as well.
 - A settings page that submits only part of the settings must merge rather than
-  replace, or saving one page wipes the others. Site Kit and SEO for AI have both
-  had this bug. Both now post a marker of which sections were on the page.
+  replace, or saving one page wipes the others. All three plugins have had this
+  bug. Site Kit and SEO for AI post a marker of which sections were on the page.
+  Bricks Tweaks caught it again in September 2026 when the group pages were
+  ported without the two lines that seed the save from what is already stored
+  and limit it to the group that was posted. Port a page, port its save.
 - An element with no link is rendered by the admin bar as an empty item, not an
   anchor, so style both.
 - Nested admin bar flyouts need position relative on the row, or they fly off
@@ -1158,5 +1179,69 @@ folder, and anything not carried back to the hub is gone.
   window ran half on old code and half on new, and stamped the cache both ways.
   A fresh request is not proof until a minute has passed, and nothing that
   writes stamps or data formats should be exercised in that minute.
+- Three plugins carrying the same shared file meant whichever loads first
+  declares the class, and the others must not declare it again. Bricks Tweaks
+  sorts before Site Kit, so when it started loading the cards class at the usual
+  time it declared it first, and an older published Site Kit whose copy had no
+  guard declared it again and killed two live sites. The lesson is not the
+  guard, which was already there: it is that the guard only helps in the copy
+  that has it, and published sites run old copies for months. A plugin that
+  sorts early loads a shared class last, on plugins_loaded at a late priority,
+  so the oldest copy present goes first and there is nothing to clash with.
+  SEO for AI has since been taken out of the arrangement altogether, and the
+  merge below finishes the job for the two that are left.
+- The error log is the fastest way to the truth and was checked third rather
+  than first during that outage, after two confident wrong explanations. Read
+  the log before forming a theory.
+
+### Where this is heading
+
+The three plugins are now two. SEO for AI was split off in September 2026 and
+shares nothing with either of these. What is left is to merge these two.
+
+The reason is everything above: the shared files exist in two copies and every
+one of them has drifted at least once. The cards CSS was missing three rules in
+Bricks Tweaks, bar_items() was never ported so the tabs listed nothing, and the
+load order of one shared class took down two client sites. None of these are
+hard problems. They are all the same problem, which is that one thing lives in
+more than one place and nothing checks that the copies agree.
+
+The shape agreed: one plugin, SocialBUMP Tweaks, in an all new folder with the
+prefix sbtweaks_, replacing the Hub as the front door. The shared functions and
+styles are combined into it once. Each plugin as it stands today becomes a
+folder inside it holding its own modules, so adding an area later is one more
+folder and nothing else. A group that cannot run on a site hides itself, so
+Bricks features do not appear where Bricks is not installed. group_needs()
+already does this, so it is configuration rather than new code.
+
+The work is not the code, which is mostly moving folders and changing a prefix.
+It is the three things around it, and each has an answer now:
+
+- Migration. Client sites hold sbsk_ and sbbt_ options and per user card meta.
+  About four sites have either plugin, so the first release reads the old keys,
+  writes them under the new prefix and erases the originals. Note what that has
+  to cover beyond the obvious two: sbsk_owned_image_sizes, sbsk_kept_orphans,
+  sbsk_image_split, sbsk_faq_fields, sbsk_groups, and the user meta
+  sbsk_cleaner_sizes and socialbump_cards. The card meta is keyed per page slug,
+  so it has to be remapped to the new slugs or everyone loses their card order.
+  The GitHub tokens and pending changes are hub only and are not carried.
+- Deployment. On each site, deactivate both old plugins, then activate the
+  merged one, which migrates on its activation hook. Options live in the
+  database whether or not a plugin is active, so nothing has to be running to
+  be read. Done in that order by hand on four sites there is no window where
+  both declare the same classes, which is why the old plugins do not need an
+  early bail out guard and do not need a release of their own first.
+- Releases. The merged plugin is a new repo with its own update stream, so it
+  starts at 0.1.0 and goes back to 1.x.x once every site is converted. Sites
+  still on the old plugins stop getting updates and are moved over by hand.
+
+The old release notes are worth keeping. They live in the GitHub releases of the
+two old repos, not on any site, since pending_changes empties at every release.
+So the merged plugin ships a release notes archive: a one off pull of both
+repos' releases into a file, read only, kept split by plugin because a note
+about a Bricks element means nothing on a site without Bricks, with the merged
+plugin's own releases appended from then on.
+
+Do it deliberately, on one site first, not as a big bang.
 
 <!-- shared:end -->

@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.10
+Stable tag: 1.1.11
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.11 =
+* New under Admin Settings: Fix ACF CPT SVG Icons, which makes SVG menu icons on post types created in ACF behave like the rest of the admin menu icons. It has moved here from SocialBUMP Bricks Tweaks, since it was never a Bricks feature. Off by default.
+
 = 1.1.10 =
 * New Post Types setting under Admin Settings. It decides which post types the rest of Site Kit offers you, so a site with a lot of them is not listing things you will never use. Anything new is offered by default.
 * New FAQ Schema module. It adds the fields for your questions and answers, either on the page itself or from a post type used as a library, and prints the FAQPage schema for them.
