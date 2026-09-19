@@ -276,6 +276,14 @@ run logs every image, because there the skipped ones are the interesting part.
   when the result would be the original, and hid the cropped sizes WordPress
   does make from a short source, such as 600 x 466 for a 600 x 600 crop of a
   1200 x 466 image. Ask WordPress; do not restate its rules.
+- stale() measures against every size registered right now, not just our own
+  list. A site can register image-480 from a snippet while this module is
+  switched off, and those files are live: comparing with our list alone called
+  1,234 working thumbnails old sizes to clear on feelsoma.com, one button press
+  from deleting them. A size anyone registers is never stale, whoever made the
+  files. Note the collision this implies: add_image_size is last-one-wins and
+  silent, and a snippet on init beats our after_setup_theme, so on a site with
+  both the settings page can show one spec while the site makes another.
 - present() counts a size as there only when the file exists AND its recorded
   dimensions still match what the size would produce now. Checking existence
   alone meant changing a size's dimensions was invisible: every image kept a

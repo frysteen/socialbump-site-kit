@@ -1663,7 +1663,7 @@ table.sbsk-report tr.sbsk-report__morerow td {
 
 .sbsk-cleaner {
 	display: grid;
-	grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+	grid-template-columns: minmax(260px, 400px) minmax(0, 1fr);
 	gap: 20px;
 	align-items: start;
 }

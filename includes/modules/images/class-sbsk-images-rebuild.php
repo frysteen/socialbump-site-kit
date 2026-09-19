@@ -147,7 +147,12 @@ class SBSK_Images_Rebuild {
 		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 		$have = array_keys( (array) ( $meta['sizes'] ?? [] ) );
 
-		return array_values( array_intersect( array_diff( $have, self::wanted() ), self::owned() ) );
+		// Measured against everything registered right now, not just our own list.
+		// A site can register image-480 from a snippet while this module is switched
+		// off, and those files are live: comparing with our list alone called 1,234
+		// working thumbnails old sizes to clear on feelsoma.com. A size anyone
+		// registers is never stale, whoever made the files.
+		return array_values( array_intersect( array_diff( $have, array_keys( self::all_wanted() ) ), self::owned() ) );
 	}
 
 	/** Remove a generated file and any WebP written beside it. */
