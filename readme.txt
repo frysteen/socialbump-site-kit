@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.9
+Stable tag: 1.1.10
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,11 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.10 =
+* New Post Types setting under Admin Settings. It decides which post types the rest of Site Kit offers you, so a site with a lot of them is not listing things you will never use. Anything new is offered by default.
+* New FAQ Schema module. It adds the fields for your questions and answers, either on the page itself or from a post type used as a library, and prints the FAQPage schema for them.
+* The FAQ Settings page now shows an FAQ Cleanup list when a post type holds FAQ content but no longer offers the field, so old questions can be cleared out without hunting for them. It only appears when there is something to clear.
+
 = 1.1.9 =
 * Image sizes are now worked out from the image file itself rather than what WordPress has on record. If a plugin resized your uploads after WordPress saved them, thumbnails that could never be built no longer sit in the list for ever, and files that are genuinely in use are no longer offered for deletion.
 * When a file is left alone because something still uses it, the post or page name is now a link straight to its editor.

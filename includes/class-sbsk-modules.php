@@ -186,10 +186,13 @@ class SBSK_Modules {
 		return $group === '' || ! isset( $states[ $group ] ) || $states[ $group ];
 	}
 
-	/** The modules that belong to one group. */
+	/**
+	 * The modules that belong to one group, including always-on ones: a feature
+	 * with no switch can still have settings, and they have to appear somewhere.
+	 */
 	public function in_group( $group ) {
 		return array_filter(
-			$this->switchable(),
+			$this->modules,
 			function ( $module ) use ( $group ) {
 				return $module['section'] === $group;
 			}
@@ -350,9 +353,16 @@ class SBSK_Modules {
 
 			case 'multicheck':
 				$allowed = array_keys( (array) self::field_options( $field ) );
-				$value   = array_map( 'sanitize_key', (array) $value );
+				$ticked  = array_values( array_intersect( array_map( 'sanitize_key', (array) $value ), $allowed ) );
 
-				return array_values( array_intersect( $value, $allowed ) );
+				// An inverted list keeps the ones left unticked, so a post type added
+				// to the site next month is offered without anyone going looking for
+				// it. Storing what IS ticked would leave it quietly missing.
+				if ( ! empty( $field['invert'] ) ) {
+					return array_values( array_diff( $allowed, $ticked ) );
+				}
+
+				return $ticked;
 
 			case 'select':
 				$value = is_scalar( $value ) ? (string) $value : '';

@@ -169,7 +169,7 @@ class SBSK_Settings {
 	private function render_field( $module_id, $key, $field ) {
 		$type    = isset( $field['type'] ) ? $field['type'] : 'text';
 		$label   = isset( $field['label'] ) ? $field['label'] : $key;
-		$default = isset( $field['default'] ) ? (string) $field['default'] : '';
+		$default = ( isset( $field['default'] ) && is_scalar( $field['default'] ) ) ? (string) $field['default'] : '';
 		$value   = SBSK_Modules::instance()->setting( $module_id, $key );
 		$name    = 'sbsk_settings[' . $module_id . '][' . $key . ']';
 		$field_id = 'sbsk-' . sanitize_key( $module_id ) . '-' . sanitize_key( $key );
@@ -211,16 +211,21 @@ class SBSK_Settings {
 					break;
 
 				case 'multicheck':
-					$chosen = (array) $value;
+					$chosen = array_map( 'strval', (array) $value );
+					$invert = ! empty( $field['invert'] );
 
+					// An inverted list stores what is NOT ticked, so anything added to
+					// the site later arrives ticked without anyone editing this page.
 					echo '<span class="sbsk-checklist">';
 
 					foreach ( SBSK_Modules::field_options( $field ) as $option => $option_label ) {
+						$listed = in_array( (string) $option, $chosen, true );
+
 						printf(
 							'<label><input type="checkbox" name="%s[]" value="%s" %s> %s</label>',
 							esc_attr( $name ),
 							esc_attr( $option ),
-							checked( in_array( (string) $option, array_map( 'strval', $chosen ), true ), true, false ),
+							checked( $invert ? ! $listed : $listed, true, false ),
 							esc_html( $option_label )
 						);
 					}
@@ -490,16 +495,23 @@ class SBSK_Settings {
 	private function render_card( $id, $module, $states ) {
 		$missing = SBSK_Modules::instance()->missing( $id );
 		$blocked = SBSK_Modules::instance()->unavailable( $id );
-		$on      = ! empty( $states[ $id ] ) && ! $missing && ! $blocked;
+		$always  = ! empty( $module['always'] );
+		$on      = $always ? ! $missing && ! $blocked : ( ! empty( $states[ $id ] ) && ! $missing && ! $blocked );
 
+		// A feature with no switch is a settings card: it is always on, so a toggle
+		// stuck in the on position would only invite someone to try turning it off.
 		printf(
-			'<div class="sbsk-card%1$s%2$s"><div class="sbsk-card__head"><h3>%3$s</h3><label class="sbsk-switch"><input type="checkbox" name="sbsk_modules[%4$s]" value="1" %5$s %6$s><span class="sbsk-switch__track"><span class="sbsk-switch__dot"></span></span><span class="screen-reader-text">%3$s</span></label></div>',
+			'<div class="sbsk-card%1$s%2$s"><div class="sbsk-card__head"><h3>%3$s</h3>%4$s</div>',
 			$on ? ' is-on' : '',
 			( $missing || $blocked ) ? ' is-unavailable' : '',
 			esc_html( $module['title'] ),
-			esc_attr( $id ),
-			checked( $on, true, false ),
-			disabled( (bool) $missing || (bool) $blocked, true, false )
+			$always ? '' : sprintf(
+				'<label class="sbsk-switch"><input type="checkbox" name="sbsk_modules[%1$s]" value="1" %2$s %3$s><span class="sbsk-switch__track"><span class="sbsk-switch__dot"></span></span><span class="screen-reader-text">%4$s</span></label>',
+				esc_attr( $id ),
+				checked( $on, true, false ),
+				disabled( (bool) $missing || (bool) $blocked, true, false ),
+				esc_html( $module['title'] )
+			)
 		);
 
 		if ( $blocked ) {
@@ -791,6 +803,11 @@ class SBSK_Settings {
 		$states = $saved;
 
 		foreach ( $modules as $id => $module ) {
+			// A feature with no switch has no state to save; its settings still do.
+			if ( ! empty( $module['always'] ) ) {
+				continue;
+			}
+
 			// A greyed out module can't be changed here, so keep whatever it was set to before.
 			if ( SBSK_Modules::instance()->missing( $id ) || SBSK_Modules::instance()->unavailable( $id ) ) {
 				$states[ $id ] = array_key_exists( $id, $saved ) ? (int) (bool) $saved[ $id ] : (int) (bool) $module['default'];
@@ -914,6 +931,11 @@ class SBSK_Settings {
 			'image-cleaner' => [
 				'title'       => __( 'Image Cleaner', 'sb-site-kit' ),
 				'description' => __( 'Missing thumbnails, old sizes and orphaned files. Off unless you are cleaning up.', 'sb-site-kit' ),
+				'default'     => false,
+			],
+			'faq'        => [
+				'title'       => __( 'FAQ Settings', 'sb-site-kit' ),
+				'description' => __( 'Fields for questions and answers, and the FAQPage schema that goes with them.', 'sb-site-kit' ),
 				'default'     => false,
 			],
 			'woocommerce' => [

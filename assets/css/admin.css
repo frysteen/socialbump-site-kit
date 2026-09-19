@@ -2133,3 +2133,129 @@ table.sbsk-report tr.sbsk-report__morerow td {
 .sbsk-report__used a {
 	text-decoration: underline;
 }
+
+.sbsk-faq-source {
+	margin: 12px 0;
+	padding: 12px 14px;
+	background: #f6f7f7;
+	border-radius: 6px;
+}
+
+.sbsk-faq-source__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid #dcdcde;
+}
+
+.sbsk-faq-remove {
+	color: #b32d2e;
+	font-size: 12px;
+}
+
+.sbsk-faq-source .sbsk-field {
+	margin-bottom: 10px;
+}
+
+.sbsk-grid--stack {
+	grid-template-columns: 1fr;
+}
+
+.sbsk-faq-source__cols {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 12px;
+	align-items: end;
+}
+
+.sbsk-faq-source__cols .sbsk-field {
+	margin-bottom: 0;
+}
+
+.sbsk-faq-source__cols select {
+	width: 100%;
+}
+
+.sbsk-faq-clean {
+	margin-top: 16px;
+	padding-top: 14px;
+	border-top: 1px solid #dcdcde;
+}
+
+.sbsk-faq-clean h4 {
+	margin: 0 0 4px;
+	font-size: 13px;
+}
+
+.sbsk-faq-clean__note {
+	color: #787c82;
+	font-size: 12px;
+	max-width: 80ch;
+}
+
+.sbsk-faq-clean__list {
+	margin: 10px 0;
+	max-height: 320px;
+	overflow-y: auto;
+	font-size: 12px;
+}
+
+.sbsk-faq-clean__list li {
+	margin: 0;
+	padding: 4px 6px;
+}
+
+.sbsk-faq-clean__list li:nth-child(odd) {
+	background: #f6f7f7;
+}
+
+.sbsk-faq-clean__list span {
+	color: #787c82;
+}
+
+.sbsk-faq-clean__list code {
+	background: none;
+	padding: 0;
+}
+
+.sbsk-faq-clean__foot {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-top: 10px;
+	border-top: 1px solid #dcdcde;
+	font-size: 12px;
+}
+
+.sbsk-faq-clean__foot .button {
+	margin-left: auto;
+}
+
+.sbsk-faq-clean__row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 4px 0;
+}
+
+.sbsk-faq-clean__row label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.sbsk-faq-clean__posts {
+	margin: 2px 0 6px 26px;
+}
+
+.sbsk-faq-clean__posts label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.sbsk-faq-clean__group + .sbsk-faq-clean__group {
+	border-top: 1px solid #f0f0f1;
+}

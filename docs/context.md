@@ -350,6 +350,87 @@ run logs every image, because there the skipped ones are the interesting part.
   MutationObserver and fills each once. The full edit screen still builds its
   meta box in place, one image, no cost worth saving.
 
+#### FAQ Settings
+
+Two ways to write FAQs, either or both, merged into one FAQPage block in
+wp_head on any single post that has questions.
+
+A repeater on the post types you tick, named faq_questions with faq_question
+and faq_answer inside. Those names are fixed and deliberately not ours to
+choose: sites already hold content in them and templates already read them, so
+turning this on where a hand made field group used to be loses nothing.
+
+Or a post type holding a library of questions, related to pages through a
+relationship field, so an answer edited once changes everywhere. Each source
+names its post type, which field the question comes from and which the answer,
+and the post types that get the relationship field. The two dropdowns offer the
+post title, content and excerpt plus any text, textarea or wysiwyg ACF field on
+that post type, refetched over AJAX when the post type changes.
+
+The relationship field is named sbsk_related_<post_type> unless the source
+overrides it. Old sites set the override to related_faq_questions and keep
+working with the field they already have. Consistent by default, explicit where
+it has to be.
+
+The field groups are registered through acf_add_local_field_group() rather than
+saved as posts: nothing to export, nothing a client can edit into a different
+shape, and they arrive with the plugin.
+
+Answers are run through do_shortcode, then stripped of shortcodes and tags and
+collapsed to single spaces. A shortcode nothing has registered is left as it is,
+because that is what a reader sees on the page too. A pair with an empty
+question or answer is dropped rather than printed hollow.
+
+FAQ Cleanup sits under the repeater card, on the page already rather than
+behind a scan button, and is not rendered at all when there is nothing to
+clear. It finds FAQ content on post types that no longer offer the field,
+repeater and relationship both, grouped by post type because that is how the
+decision is made: untick Services and you want its FAQ content gone, not a list
+of eleven posts. Each group opens to the posts inside it for the times you want
+only some.
+
+Field names are remembered in sbsk_faq_fields when the settings save, so a
+source deleted from the settings can still be found. forget() removes the count
+row, every sub field row and the hidden key row beside each, because deleting
+the one row a person can see leaves the rest behind, and it refuses any field
+name that is not ours. The delete rechecks the list server side, so a tick made
+before someone turned a post type back on cannot remove anything.
+
+The panel says plainly that nothing is wrong: turning a post type off hides the
+field and leaves what was written, which is what you want for a change you
+might undo. Without that line the list reads as a fault to be fixed and invites
+deleting during a temporary change.
+
+Worth knowing: Google stopped showing FAQ rich results for most sites in August
+2023, keeping them for well known health and government sources. The markup is
+still correct and still read by other things, so this is not wasted, but it will
+not put questions under a search result the way it used to.
+
+#### Post types
+
+Three layers, because they answer different questions.
+
+sbsk_post_type_choices() drops the plumbing: blocks, templates, font records,
+field groups, builder templates. Nobody wants FAQs on a reusable block, so
+these are never offered rather than being something to untick on every site.
+Filterable through sbsk/post_types/never.
+
+The Post Types card, in Admin Settings, decides which of the rest the plugin
+offers at all. It is stored inverted: the setting keeps the names left
+UNTICKED, so a post type a plugin adds next month is offered straight away
+rather than going quietly missing from every feature. That is what the invert
+flag on a multicheck field does, in the renderer and the sanitiser.
+
+sbsk_post_types() returns what is left, and each feature keeps its own choice
+from within it: FAQ Schema might pick post and service while something else
+picks page only.
+
+The card has no on/off switch, which needed three small changes: in_group()
+now includes always-on modules so their settings have somewhere to appear,
+render_card() leaves out the toggle for them rather than showing one stuck on,
+and save() skips writing a state they do not have. render_field() also stopped
+casting an array default to a string, which warned on every multicheck.
+
 #### Find leftover thumbnails (the deep scan)
 
 Three things can be wrong with a size file, and each needs its own check.
@@ -732,14 +813,45 @@ SocialBUMP_Cards and module-cards.js give a page of cards a chevron to collapse
 each to its title (the title toggles too), Collapse all, Expand all and Collapse
 disabled links above the grid, and a Reorder Cards button below it that opens a
 list to drag. Order and collapsed state are per user, in user meta, alphabetical
-until changed, and saved over AJAX as they change, never through the form. A
-plugin wires it with register( prefix, menu slug ) at boot, sort() for the order,
-container_attributes() on the grid, card_attribute() on each card, and toolbar()
-twice, links above and reorder below. A card's first child must be its head. The
+until changed, and saved over AJAX as they change, never through the form. The
 saved order is meant to drive the menu, the tab bar and the admin bar as well,
-and saving one drops that menu's entry from ASE's submenu order. The CSS is the
-chunk at the end of Site Kit's admin.css marked Shared, generic .sb- classes,
-to be copied as is. Both files are identical wherever they exist.
+and saving one drops that menu's entry from ASE's submenu order. Both files are
+identical wherever they exist.
+
+Putting the page into a plugin takes five things, and it is broken in a quiet
+way if any one is missed. Porting it to Bricks Tweaks missed three of them and
+the page looked wrong rather than dead, which cost an hour:
+
+1. Copy class-socialbump-cards.php and module-cards.js in. The class guards
+   itself with class_exists, but require it behind class_exists as well: an
+   opcache entry compiled before that guard existed took a site down.
+2. Call register( prefix, menu slug ) at boot. Without it the AJAX endpoint
+   never exists, so the arrangement cannot save.
+3. Enqueue module-cards.js on the settings pages, handle sb-module-cards.
+   Without it nothing collapses or drags at all.
+4. Mark up the grid: container_attributes() on it, card_attribute() on each
+   card, toolbar() twice, links above and reorder below. A card's first child
+   must be its head, and the toolbar key must match the grid's.
+5. Copy the CSS. This is the part that hides: the rules are NOT all generic
+   .sb- classes in one chunk. Three of them are attribute selectors that a
+   search for .sb- will not find, and every one of them matters:
+
+       [data-sb-cards] { align-items: start; }
+       [data-sb-card] > :first-child > h3 { flex: 1; }
+       [data-sb-card].is-collapsed > :not(:first-child) { display: none; }
+
+   Without the first, cards stretch to the tallest in the row. Without the
+   second, the title does not take the space and the chevron and switch sit
+   wrong. Without the third, collapsing works and looks like nothing happened.
+   The prefixed card rules are needed too: card, card__head, card__desc,
+   card__link, switch, features and dot.
+
+To check a port, render the page, pull every class out of the markup and look
+each one up in that plugin's stylesheet. That catches the prefixed ones. Then
+check the three attribute selectors above by name, because they never appear in
+the markup: is-collapsed is added by the JS, and the other two are on elements
+whose classes are already there. Eyeballing the page does not catch any of this,
+because a missing rule looks like a layout opinion rather than a fault.
 
 ### The shared admin bar item
 
