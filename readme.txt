@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.8
+Stable tag: 1.1.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,12 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.9 =
+* Image sizes are now worked out from the image file itself rather than what WordPress has on record. If a plugin resized your uploads after WordPress saved them, thumbnails that could never be built no longer sit in the list for ever, and files that are genuinely in use are no longer offered for deletion.
+* When a file is left alone because something still uses it, the post or page name is now a link straight to its editor.
+* Deleting leftover thumbnails now shows a progress bar with elapsed time and an average per file, and repeats both when it finishes.
+* Building thumbnails now works through only the images that need one, so the progress bar counts what it will really do rather than every image in the library.
+
 = 1.1.8 =
 * Fixed thumbnails being listed as old sizes to clear when another plugin or snippet still registers that size. On a site where image sizes were set up elsewhere, more than a thousand working thumbnails were being offered for deletion.
 * The list of sizes on the Image Cleaner page can be a little wider, for sites with long size names.

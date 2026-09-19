@@ -276,6 +276,32 @@ run logs every image, because there the skipped ones are the interesting part.
   when the result would be the original, and hid the cropped sizes WordPress
   does make from a short source, such as 600 x 466 for a 600 x 600 crop of a
   1200 x 466 image. Ask WordPress; do not restate its rules.
+- dimensions() reads the original's size from the file, not the metadata, and
+  everything that decides what a size should be uses it: present(),
+  missing_all(), rebuild() and the leftover scan's expected_dimensions(). An
+  optimiser that caps uploads, WPvivid here, rewrites the file and leaves the
+  metadata saying what it used to be. Eleven images on feelsoma.com did, one
+  claiming 2560 x 1922 for a file that is 1920 x 1442. Everything between those
+  numbers was reported missing and could never be built, because the resize the
+  metadata implies is impossible, and 271 files were offered for deletion as
+  leftovers because they were judged against sizes that original cannot make.
+  Reading the header is about a tenth of a millisecond, 0.05s across 401
+  images, and it is the only number that can be acted on. The metadata itself
+  is left alone: correcting it is a repair, not a scan's business.
+- A run works through the images that have something to do, not the whole
+  library: ids() takes the mode and filters to the ones missing a size, or
+  carrying a stale one, before the run starts. A plain build on a library that
+  is nearly current walked all 416 images on feelsoma.com to find the 7 that
+  needed anything, and the bar crawled through hundreds doing nothing visible.
+  The filter costs a fifth of a second once. A forced rebuild remakes
+  everything, so it keeps the whole list. The batch reports the run length so
+  the bar counts to what it will really do.
+- A file still in use names what is using it, with a link to edit that post
+  where the person can edit it, through references_html(). references() carries
+  an edit URL beside each label, and references_text() is the plain version for
+  anywhere a link cannot go.
+- Deleting leftovers keeps the same clock the rebuild does: elapsed and per file
+  while it runs, and both again in the finished line.
 - stale() measures against every size registered right now, not just our own
   list. A site can register image-480 from a snippet while this module is
   switched off, and those files are live: comparing with our list alone called

@@ -57,7 +57,16 @@ class SBSK_Images_Tools {
 	 * again before taking its five. The list is kept for the run instead, and
 	 * dropped when the run finishes or ten minutes pass.
 	 */
-	private static function ids( $for_run = false ) {
+	/**
+	 * The images a run will work through.
+	 *
+	 * $mode narrows the list to the images that actually have something to do,
+	 * worked out once when the run starts and held for it. A plain build on a
+	 * library that is nearly up to date walked all of them to find the few that
+	 * needed a size, so the bar crawled through hundreds of images doing nothing
+	 * visible. A forced rebuild remakes everything, so it keeps the whole list.
+	 */
+	private static function ids( $for_run = false, $mode = '' ) {
 		$key = 'sbsk_images_run_' . get_current_user_id();
 
 		if ( $for_run ) {
@@ -69,6 +78,24 @@ class SBSK_Images_Tools {
 		}
 
 		$ids = self::query_ids();
+
+		if ( $for_run && ( $mode === 'build' || $mode === 'clean' ) ) {
+			$only  = SBSK_Images_Cleaner::chosen();
+			$keep  = [];
+
+			foreach ( $ids as $id ) {
+				$meta = (array) wp_get_attachment_metadata( $id );
+				$work = $mode === 'clean'
+					? SBSK_Images_Rebuild::stale( $id, $meta )
+					: SBSK_Images_Rebuild::missing_all( $id, $meta, $only );
+
+				if ( $work ) {
+					$keep[] = $id;
+				}
+			}
+
+			$ids = $keep;
+		}
 
 		if ( $for_run ) {
 			set_transient( $key, $ids, 10 * MINUTE_IN_SECONDS );
@@ -191,7 +218,8 @@ class SBSK_Images_Tools {
 		$force   = ! empty( $_POST['force'] );
 		$size    = isset( $_POST['batch'] ) ? (int) $_POST['batch'] : self::BATCH;
 		$size    = max( 1, min( self::BATCH, $size ) );
-		$ids     = array_slice( self::ids( true ), $offset, $size );
+		$run     = self::ids( true, $force ? 'force' : ( isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : 'build' ) );
+		$ids     = array_slice( $run, $offset, $size );
 		$built   = 0;
 		$removed = 0;
 		$files   = 0;
@@ -245,6 +273,9 @@ class SBSK_Images_Tools {
 		wp_send_json_success(
 			[
 				'processed' => count( $ids ),
+				// How many this run actually has to work through, which for a plain
+				// build is the images missing something rather than the whole library.
+				'total'     => count( $run ),
 				'offset'    => $offset + count( $ids ),
 				'built'     => $built,
 				'removed'   => $removed,
@@ -759,7 +790,7 @@ class SBSK_Images_Tools {
 				$state    = '';
 
 				if ( $used ) {
-					$state = '<span class="sbsk-report__used">' . esc_html__( 'in use:', 'sb-site-kit' ) . ' ' . esc_html( implode( ', ', $used ) ) . '</span>';
+					$state = '<span class="sbsk-report__used">' . esc_html__( 'in use:', 'sb-site-kit' ) . ' ' . SBSK_Images_Orphans::references_html( $used ) . '</span>';
 				}
 
 								$classes = $is_kept ? [ 'is-kept' ] : [];

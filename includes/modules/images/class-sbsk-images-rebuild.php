@@ -76,8 +76,9 @@ class SBSK_Images_Rebuild {
 		$meta   = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 		$file   = get_attached_file( $id );
 		$sizes  = self::all_wanted();
-		$width  = isset( $meta['width'] ) ? (int) $meta['width'] : 0;
-		$height = isset( $meta['height'] ) ? (int) $meta['height'] : 0;
+		$real   = self::dimensions( $id, $meta );
+		$width  = $real[0];
+		$height = $real[1];
 		$have   = [];
 
 		if ( ! $file ) {
@@ -554,6 +555,43 @@ class SBSK_Images_Rebuild {
 	 * makes no file when the result would be the original, so those images sat
 	 * in Sizes to build for ever and no rebuild could satisfy them.
 	 */
+	/**
+	 * The original's real dimensions, read from the file rather than taken from
+	 * the metadata.
+	 *
+	 * An optimiser can resize the file and leave the metadata saying what it used
+	 * to be. On feelsoma.com eleven images did, one claiming 2560 x 1922 for a
+	 * file that is 1920 x 1442: every size between those numbers was reported as
+	 * missing and could never be built, because the resize the metadata implies
+	 * is impossible. Reading the header costs about a tenth of a millisecond and
+	 * it is the only number that can be acted on.
+	 */
+	public static function dimensions( $id, array $meta = null ) {
+		static $seen = [];
+
+		$id = (int) $id;
+
+		if ( isset( $seen[ $id ] ) ) {
+			return $seen[ $id ];
+		}
+
+		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
+		$size = [ isset( $meta['width'] ) ? (int) $meta['width'] : 0, isset( $meta['height'] ) ? (int) $meta['height'] : 0 ];
+		$file = get_attached_file( $id );
+
+		if ( $file && file_exists( $file ) ) {
+			$real = @getimagesize( $file );
+
+			if ( $real && (int) $real[0] > 0 ) {
+				$size = [ (int) $real[0], (int) $real[1] ];
+			}
+		}
+
+		$seen[ $id ] = $size;
+
+		return $size;
+	}
+
 	public static function can_make( $width, $height, array $size ) {
 		$width  = (int) $width;
 		$height = (int) $height;
@@ -573,6 +611,7 @@ class SBSK_Images_Rebuild {
 		}
 
 		$have    = self::present( $id, $meta );
+		$real    = self::dimensions( $id, $meta );
 		$missing = [];
 
 		foreach ( self::all_wanted() as $name => $size ) {
@@ -580,7 +619,7 @@ class SBSK_Images_Rebuild {
 				continue;
 			}
 
-			if ( self::can_make( $meta['width'], $meta['height'] ?? 0, $size ) ) {
+			if ( self::can_make( $real[0], $real[1], $size ) ) {
 				$missing[] = $name;
 			}
 		}
@@ -606,8 +645,9 @@ class SBSK_Images_Rebuild {
 			return $done;
 		}
 
-		$meta      = (array) wp_get_attachment_metadata( $id );
-		$sizes     = self::all_wanted();
+		$meta  = (array) wp_get_attachment_metadata( $id );
+		$sizes = self::all_wanted();
+		$real  = self::dimensions( $id, $meta );
 		$specs = [];
 
 		foreach ( $names as $name ) {
@@ -618,7 +658,7 @@ class SBSK_Images_Rebuild {
 			$spec = $sizes[ $name ];
 
 			// The same rule a plain build uses, so forcing is never a smaller job.
-			if ( ! self::can_make( $meta['width'] ?? 0, $meta['height'] ?? 0, $spec ) ) {
+			if ( ! self::can_make( $real[0], $real[1], $spec ) ) {
 				continue;
 			}
 

@@ -274,6 +274,12 @@
 					totals.built += data.built;
 					totals.files += data.files;
 
+					// The server knows how many the run really covers; a plain build
+					// skips the images that need nothing.
+					if ( data.total ) {
+						total = data.total;
+					}
+
 					var done = Math.min( data.offset, total );
 
 					seenNow = done;
@@ -490,6 +496,20 @@
 				var removed = 0;
 				var freed   = 0;
 				var skipped = [];
+				var began   = Date.now();
+
+				// The same clock the rebuild keeps, so a long delete reads the same way.
+				function took() {
+					return Math.max( 0, Math.round( ( Date.now() - began ) / 1000 ) );
+				}
+
+				function spellTook( seconds ) {
+					return seconds < 60 ? seconds + 's' : Math.floor( seconds / 60 ) + 'm ' + ( seconds % 60 ) + 's';
+				}
+
+				function each( done ) {
+					return done > 0 && took() > 0 ? ', ' + ( Math.round( ( took() / done ) * 100 ) / 100 ) + 's per file' : '';
+				}
 
 				// The same bar the rebuild uses, so a long delete looks like work rather
 				// than a stuck line of text.
@@ -518,19 +538,20 @@
 							var seen = Math.min( removed + skipped.length, data.total || files );
 
 							$deep.find( '.sbsk-deep__bar span' ).css( 'width', ( data.total ? Math.round( ( seen / data.total ) * 100 ) : 0 ) + '%' );
-							$deep.find( '.sbsk-deep__working' ).text( 'Deleting... ' + removed + ' of ' + files + ' removed.' );
+							$deep.find( '.sbsk-deep__working' ).text( 'Deleting... ' + removed + ' of ' + files + ' removed. ' + spellTook( took() ) + each( removed ) );
 							batch( data.offset );
 
 							return;
 						}
 
-						var note = '<p class="sbsk-deep__working">Removed ' + removed + ' file' + ( removed === 1 ? '' : 's' ) + ', ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed.</p>';
+						var note = '<p class="sbsk-deep__working">Removed ' + removed + ' file' + ( removed === 1 ? '' : 's' ) + ', ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed. Took ' + spellTook( took() ) + each( removed ) + '.</p>';
 
 						if ( skipped.length ) {
 							note += '<div class="sbsk-deep__skipped"><p>' + skipped.length + ' file' + ( skipped.length === 1 ? ' was' : 's were' ) + ' left alone:</p><ul>';
 
 							skipped.slice( 0, 20 ).forEach( function ( skip ) {
-								note += '<li><code>' + $( '<span>' ).text( skip.name ).html() + '</code> <span>' + $( '<span>' ).text( skip.why ).html() + '</span></li>';
+								// why_html is built and escaped server side, and carries the edit links.
+								note += '<li><code>' + $( '<span>' ).text( skip.name ).html() + '</code> <span>' + ( skip.why_html || $( '<span>' ).text( skip.why ).html() ) + '</span></li>';
 							} );
 
 							if ( skipped.length > 20 ) {

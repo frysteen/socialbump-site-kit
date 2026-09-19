@@ -2128,3 +2128,8 @@ table.sbsk-report tr.sbsk-report__morerow td {
 .sbsk-deep__bar {
 	margin: 0 0 10px;
 }
+
+.sbsk-deep__skipped a,
+.sbsk-report__used a {
+	text-decoration: underline;
+}

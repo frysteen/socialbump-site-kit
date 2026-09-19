@@ -379,7 +379,7 @@ class SBSK_Images_Orphans {
 		$sizes  = SBSK_Images_Rebuild::all_wanted();
 		$expect = [];
 
-		$rows = $wpdb->get_results( "SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attachment_metadata'" );
+		$rows = $wpdb->get_results( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attachment_metadata'" );
 
 		foreach ( $rows as $row ) {
 			$meta = maybe_unserialize( $row->meta_value );
@@ -388,10 +388,16 @@ class SBSK_Images_Orphans {
 				continue;
 			}
 
-			$name   = pathinfo( $meta['file'], PATHINFO_FILENAME );
-			$name   = strtolower( preg_replace( '/-scaled$/', '', $name ) );
-			$width  = isset( $meta['width'] ) ? (int) $meta['width'] : 0;
-			$height = isset( $meta['height'] ) ? (int) $meta['height'] : 0;
+			$name = pathinfo( $meta['file'], PATHINFO_FILENAME );
+			$name = strtolower( preg_replace( '/-scaled$/', '', $name ) );
+
+			// Read from the file, not the metadata: an optimiser that resizes an
+			// upload leaves the metadata saying what it used to be, and judging
+			// leftovers against sizes the original cannot produce gets both answers
+			// wrong. Same reason SBSK_Images_Rebuild::dimensions() exists.
+			$real   = SBSK_Images_Rebuild::dimensions( (int) $row->post_id, $meta );
+			$width  = $real[0];
+			$height = $real[1];
 
 			if ( $name === '' ) {
 				continue;
@@ -492,6 +498,49 @@ class SBSK_Images_Orphans {
 	 * The lookup is free; only a file that is actually mentioned costs a query,
 	 * and that is to name what is using it.
 	 */
+	/** A label for a post row, with a link to edit it when the user may. */
+	private static function label_for( $post ) {
+		$title = $post->post_title !== '' ? $post->post_title : ( '#' . $post->ID );
+
+		return [
+			'label' => sprintf( '%s (%s)', $title, $post->post_type ),
+			'edit'  => current_user_can( 'edit_post', $post->ID ) ? (string) get_edit_post_link( $post->ID, 'raw' ) : '',
+		];
+	}
+
+	/**
+	 * Turn reference labels into links to whatever is using the file.
+	 *
+	 * references() records an edit URL alongside each label where there is one,
+	 * so a person can go straight to the post or event holding the image rather
+	 * than searching for it by name.
+	 */
+	public static function references_html( array $used ) {
+		$parts = [];
+
+		foreach ( $used as $one ) {
+			$label = is_array( $one ) ? $one['label'] : (string) $one;
+			$edit  = is_array( $one ) && ! empty( $one['edit'] ) ? $one['edit'] : '';
+
+			$parts[] = $edit
+				? '<a href="' . esc_url( $edit ) . '" target="_blank" rel="noopener">' . esc_html( $label ) . '</a>'
+				: esc_html( $label );
+		}
+
+		return implode( ', ', $parts );
+	}
+
+	/** The same list as plain text, for anywhere a link cannot go. */
+	public static function references_text( array $used ) {
+		$parts = [];
+
+		foreach ( $used as $one ) {
+			$parts[] = is_array( $one ) ? $one['label'] : (string) $one;
+		}
+
+		return implode( ', ', $parts );
+	}
+
 	public static function references( $path ) {
 		$name    = strtolower( basename( $path ) );
 		$names   = self::mentioned_names();
@@ -508,7 +557,7 @@ class SBSK_Images_Orphans {
 		$posts = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_title, post_type FROM {$wpdb->posts} WHERE post_content LIKE %s AND post_type <> 'revision' LIMIT 3", $like ) );
 
 		foreach ( $posts as $post ) {
-			$found[] = sprintf( '%s (%s)', $post->post_title !== '' ? $post->post_title : ( '#' . $post->ID ), $post->post_type );
+			$found[] = self::label_for( $post );
 		}
 
 		$skip = array_merge( [ '_wp_attachment_metadata' ], self::bookkeeping_keys() );
@@ -517,7 +566,7 @@ class SBSK_Images_Orphans {
 		$meta = $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, p.post_title, p.post_type FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE m.meta_value LIKE %s AND p.post_type <> 'revision' AND m.meta_key NOT IN ( {$hold} ) LIMIT 3", array_merge( [ $like ], $skip ) ) );
 
 		foreach ( $meta as $post ) {
-			$label = sprintf( '%s (%s)', $post->post_title !== '' ? $post->post_title : ( '#' . $post->ID ), $post->post_type );
+			$label = self::label_for( $post );
 
 			if ( ! in_array( $label, $found, true ) ) {
 				$found[] = $label;
@@ -528,7 +577,7 @@ class SBSK_Images_Orphans {
 			$options = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_value LIKE %s AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' LIMIT 2", $like ) );
 
 			foreach ( $options as $option ) {
-				$found[] = sprintf( '%s (setting)', $option );
+				$found[] = [ 'label' => sprintf( '%s (setting)', $option ), 'edit' => '' ];
 			}
 		}
 
@@ -539,7 +588,7 @@ class SBSK_Images_Orphans {
 				$hit = $wpdb->get_var( $wpdb->prepare( "SELECT meta_key FROM {$table} WHERE meta_value LIKE %s LIMIT 1", $like ) );
 
 				if ( $hit ) {
-					$found[] = sprintf( '%1$s (%2$s)', $hit, $what );
+					$found[] = [ 'label' => sprintf( '%1$s (%2$s)', $hit, $what ), 'edit' => '' ];
 				}
 			}
 		}
@@ -619,7 +668,11 @@ class SBSK_Images_Orphans {
 			$name = basename( $path );
 
 			if ( ! empty( $used[ $name ] ) ) {
-				$skipped[] = [ 'name' => $name, 'why' => sprintf( __( 'in use: %s', 'sb-site-kit' ), implode( ', ', $used[ $name ] ) ) ];
+				$skipped[] = [
+					'name'     => $name,
+					'why'      => sprintf( __( 'in use: %s', 'sb-site-kit' ), self::references_text( $used[ $name ] ) ),
+					'why_html' => sprintf( esc_html__( 'in use: %s', 'sb-site-kit' ), self::references_html( $used[ $name ] ) ),
+				];
 
 				continue;
 			}
