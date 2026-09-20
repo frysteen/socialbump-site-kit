@@ -3,7 +3,7 @@
  * Plugin Name: SocialBUMP Site Kit
  * Plugin URI:  https://socialbump.com.au
  * Description: SocialBUMP base styling, ACF fields, shortcodes and admin tweaks. Switch each feature on or off under SB Site Kit.
- * Version:     1.1.12
+ * Version:     1.1.13
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author:      SocialBUMP
@@ -16,11 +16,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SBSK_VERSION', '1.1.12' );
+define( 'SBSK_VERSION', '1.1.13' );
 define( 'SBSK_FILE', __FILE__ );
 define( 'SBSK_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SBSK_URL', plugin_dir_url( __FILE__ ) );
-define( 'SBSK_OPTION', 'sbsk_modules' );
+define( 'SBSK_OPTION', 'sb_tweaks_site_kit_features' );
 define( 'SBSK_SLUG', 'socialbump-site-kit' );
 define( 'SBSK_GITHUB_REPO', 'frysteen/socialbump-site-kit' );
 define( 'SBSK_HUB_HOST', 'bricks.socialbump.com.au' );
@@ -127,7 +127,7 @@ function sbsk_log_change( $text ) {
  * setting it lived in is dropped. Runs once and records that it has.
  */
 function sbsk_split_image_cleaner() {
-	if ( (int) get_option( 'sbsk_image_split' ) >= 2 ) {
+	if ( (int) get_option( 'sb_tweaks_site_kit_image_split' ) >= 2 ) {
 		return;
 	}
 
@@ -148,7 +148,7 @@ function sbsk_split_image_cleaner() {
 		update_option( SBSK_Modules::SETTINGS_OPTION, $settings );
 	}
 
-	update_option( 'sbsk_image_split', 2, false );
+	update_option( 'sb_tweaks_site_kit_image_split', 2, false );
 }
 
 /**
@@ -156,6 +156,12 @@ function sbsk_split_image_cleaner() {
  * a module that needs Bricks, ACF or WooCommerce declares it in 'requires'.
  */
 function sbsk_boot() {
+	require_once SBSK_PATH . 'includes/class-sbsk-convert.php';
+
+	// Before anything reads a setting, or a site would boot once on defaults
+	// and save those back over what was actually configured.
+	SBSK_Convert::maybe_run();
+
 	require_once SBSK_PATH . 'includes/class-sbsk-modules.php';
 	require_once SBSK_PATH . 'includes/class-socialbump-admin-bar.php';
 require_once SBSK_PATH . 'includes/class-socialbump-overview.php';

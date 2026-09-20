@@ -55,7 +55,7 @@ class SBSK_Settings {
 			$titles[ $group ] = isset( $sections[ $group ]['title'] ) ? $sections[ $group ]['title'] : $group;
 		}
 
-		$ids     = class_exists( 'SocialBUMP_Cards' ) ? SocialBUMP_Cards::sort( $titles, 'sbsk_groups' ) : array_keys( $titles );
+		$ids     = class_exists( 'SocialBUMP_Cards' ) ? SocialBUMP_Cards::sort( $titles, SBSK_Modules::GROUPS_OPTION ) : array_keys( $titles );
 		$ordered = [];
 
 		foreach ( $ids as $group ) {
@@ -82,7 +82,7 @@ class SBSK_Settings {
 		add_submenu_page(
 			self::PAGE_SLUG,
 			esc_html__( 'SocialBUMP Site Kit', 'sb-site-kit' ),
-			esc_html__( 'Modules', 'sb-site-kit' ),
+			esc_html__( 'Features', 'sb-site-kit' ),
 			'manage_options',
 			self::PAGE_SLUG,
 			[ $this, 'render_groups' ]
@@ -370,7 +370,7 @@ class SBSK_Settings {
 		$states   = SBSK_Modules::instance()->group_states();
 
 		echo '<div class="wrap sbsk-wrap">';
-		$this->render_header( __( 'Modules', 'sb-site-kit' ), __( 'Switch on the parts of the kit this site needs. Each one adds its own page below.', 'sb-site-kit' ) );
+		$this->render_header( __( 'Features', 'sb-site-kit' ), __( 'Switch on the parts of the kit this site needs. Each one adds its own page below.', 'sb-site-kit' ) );
 
 		if ( isset( $_GET['updated'] ) ) {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'sb-site-kit' ) . '</p></div>';
@@ -381,10 +381,10 @@ class SBSK_Settings {
 		wp_nonce_field( 'sbsk_save_groups' );
 		// Reorder sits up here with the heading. Below the grid it was too easy to
 		// hit on the way to Save changes.
-		echo '<section class="sbsk-section"><div class="sbsk-section__head sbsk-section__head--tools"><div><h2>' . esc_html__( 'Modules', 'sb-site-kit' ) . '</h2><p>' . esc_html__( 'Each one switched on adds its own page to the menu. Reorder puts them in the order you want, here and in the menus, and each one collapses to its title.', 'sb-site-kit' ) . '</p></div>';
+		echo '<section class="sbsk-section"><div class="sbsk-section__head sbsk-section__head--tools"><div><h2>' . esc_html__( 'Features', 'sb-site-kit' ) . '</h2><p>' . esc_html__( 'Each one switched on adds its own page to the menu. Reorder puts them in the order you want, here and in the menus, and each one collapses to its title.', 'sb-site-kit' ) . '</p></div>';
 
 		if ( class_exists( 'SocialBUMP_Cards' ) ) {
-			echo SocialBUMP_Cards::toolbar( 'sbsk_groups', 'reorder' );
+			echo SocialBUMP_Cards::toolbar( SBSK_Modules::GROUPS_OPTION, 'reorder' );
 		}
 
 		echo '</div>';
@@ -396,13 +396,13 @@ class SBSK_Settings {
 			$titles[ $group ] = $section['title'];
 		}
 
-		$ordered = class_exists( 'SocialBUMP_Cards' ) ? SocialBUMP_Cards::sort( $titles, 'sbsk_groups' ) : array_keys( $titles );
+		$ordered = class_exists( 'SocialBUMP_Cards' ) ? SocialBUMP_Cards::sort( $titles, SBSK_Modules::GROUPS_OPTION ) : array_keys( $titles );
 
 		if ( class_exists( 'SocialBUMP_Cards' ) ) {
-			echo SocialBUMP_Cards::toolbar( 'sbsk_groups', 'links' );
+			echo SocialBUMP_Cards::toolbar( SBSK_Modules::GROUPS_OPTION, 'links' );
 		}
 
-		echo '<div class="sbsk-grid"' . ( class_exists( 'SocialBUMP_Cards' ) ? SocialBUMP_Cards::container_attributes( 'sbsk_groups', 'sbsk' ) : '' ) . '>';
+		echo '<div class="sbsk-grid"' . ( class_exists( 'SocialBUMP_Cards' ) ? SocialBUMP_Cards::container_attributes( SBSK_Modules::GROUPS_OPTION, 'sbsk' ) : '' ) . '>';
 
 		foreach ( $ordered as $group ) {
 			$section = $sections[ $group ];
@@ -693,7 +693,7 @@ class SBSK_Settings {
 	}
 	private function bar_items() {
 		$sections = $this->sections();
-		$items    = [ self::PAGE_SLUG => __( 'Modules', 'sb-site-kit' ) ];
+		$items    = [ self::PAGE_SLUG => __( 'Features', 'sb-site-kit' ) ];
 
 		foreach ( $this->ordered_groups() as $group => $on ) {
 			if ( ! $on || ! SBSK_Modules::instance()->in_group( $group ) ) {

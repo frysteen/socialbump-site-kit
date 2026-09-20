@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class SBSK_FAQ {
 
-	const OPTION = 'sbsk_faq';
+	const OPTION = 'sb_tweaks_site_kit_faq';
 
 	/** Repeater field names. Fixed, because sites already have content in them. */
 	const REPEATER = 'faq_questions';
@@ -117,7 +117,7 @@ class SBSK_FAQ {
 			return $source['relation_field'];
 		}
 
-		return 'sbsk_related_' . str_replace( '-', '_', sanitize_key( $source['post_type'] ) );
+		return 'sb_tweaks_faq_related_' . str_replace( '-', '_', sanitize_key( $source['post_type'] ) );
 	}
 
 	/**

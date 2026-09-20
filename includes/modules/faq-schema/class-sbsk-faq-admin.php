@@ -349,7 +349,7 @@ class SBSK_FAQ_Admin {
 			'<input type="text" class="regular-text code" name="%s[relation_field]" value="%s" placeholder="%s">',
 			esc_attr( $name ),
 			esc_attr( $source['relation_field'] ),
-			esc_attr( $source['post_type'] ? SBSK_FAQ::relation_field( [ 'post_type' => $source['post_type'] ] ) : 'sbsk_related_faq' )
+			esc_attr( $source['post_type'] ? SBSK_FAQ::relation_field( [ 'post_type' => $source['post_type'] ] ) : 'sb_tweaks_faq_related_faq' )
 		);
 		echo '<p class="sbsk-field__desc">' . esc_html__( 'Leave empty for the name shown. Set it to an existing name, such as related_faq_questions, to keep working with fields a site already has.', 'sb-site-kit' ) . '</p></div>';
 
@@ -416,7 +416,7 @@ class SBSK_FAQ_Admin {
 						}
 					} );
 
-					$row.find( 'input[name$="[relation_field]"]' ).attr( 'placeholder', 'sbsk_related_' + type.replace( /-/g, '_' ) );
+					$row.find( 'input[name$="[relation_field]"]' ).attr( 'placeholder', 'sb_tweaks_faq_related_' + type.replace( /-/g, '_' ) );
 				} );
 			} );
 

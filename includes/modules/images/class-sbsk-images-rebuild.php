@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class SBSK_Images_Rebuild {
 
-	const OWNED_OPTION = 'sbsk_owned_image_sizes';
+	const OWNED_OPTION = 'sb_tweaks_site_kit_owned_image_sizes';
 
 	/** Remember the size names we register, so we know what is safe to delete. */
 	public static function remember( array $names ) {

@@ -26,9 +26,9 @@ class SBSK_Modules {
 
 	private static $instance = null;
 
-	const SETTINGS_OPTION = 'sbsk_module_settings';
+	const SETTINGS_OPTION = 'sb_tweaks_site_kit_settings';
 
-	const GROUPS_OPTION = 'sbsk_groups';
+	const GROUPS_OPTION = 'sb_tweaks_site_kit_groups';
 
 	private $modules = [];
 

@@ -30,7 +30,7 @@ class SBSK_Images_Cleaner {
 		add_action( 'admin_post_sbsk_save_cleaner_sizes', [ __CLASS__, 'save_sizes' ] );
 	}
 
-	const CHOICE_META = 'sbsk_cleaner_sizes';
+	const CHOICE_META = 'sb_tweaks_site_kit_cleaner_sizes';
 
 	/**
 	 * Every registered size, grouped for the list on the page: ours, the ones

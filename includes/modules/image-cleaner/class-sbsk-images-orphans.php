@@ -109,7 +109,7 @@ class SBSK_Images_Orphans {
 	 * in to stop directory listings, server config, and anything hidden.
 	 */
 
-	const KEPT_OPTION = 'sbsk_kept_orphans';
+	const KEPT_OPTION = 'sb_tweaks_site_kit_kept_orphans';
 
 	/** Files marked as worth keeping, as paths relative to the uploads folder. */
 	public static function kept() {

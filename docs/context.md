@@ -58,14 +58,18 @@ A group is on until switched off, unless its section carries default false, whic
 is how Image Cleaner starts off on a fresh site. A group with one module shows
 that module's page as its own; Images and Image Cleaner are both like that.
 
-The Modules page cards can be collapsed to their title, by the chevron or by
+The shared block below still calls this the Modules page, because that block is
+identical in Bricks Tweaks and the word means something else after the merge.
+Site Kit renamed its own page in September 2026.
+
+The Features page cards can be collapsed to their title, by the chevron or by
 clicking the title, and put in any order with Reorder Cards. Both are per user,
 kept in user meta by the shared SocialBUMP_Cards class, and alphabetical until
 changed. The order is the same everywhere: ordered_groups() feeds the cards, the
 tab bar, the sidebar submenu and the admin bar, with Modules first and Updates
 and Publishing last. Saving an order also drops this menu's entry from Admin and
 Site Enhancements' submenu order, so ASE stops sitting on top of it. Only the
-Modules page does any of this; group pages stay plain.
+Features page does any of this; group pages stay plain.
 
 ## What each module does
 
@@ -368,7 +372,7 @@ and the post types that get the relationship field. The two dropdowns offer the
 post title, content and excerpt plus any text, textarea or wysiwyg ACF field on
 that post type, refetched over AJAX when the post type changes.
 
-The relationship field is named sbsk_related_<post_type> unless the source
+The relationship field is named sb_tweaks_faq_related_<post_type> unless the source
 overrides it. Old sites set the override to related_faq_questions and keep
 working with the field they already have. Consistent by default, explicit where
 it has to be.
@@ -466,7 +470,7 @@ The card has no on/off switch, which needed four small changes: in_group()
 now includes always-on modules so their settings have somewhere to appear,
 render_card() leaves out the toggle for them rather than showing one stuck on,
 save() skips writing a state they do not have, and the feature list on the
-Modules page treats always as on. That last one was missed: the list asked for
+Features page treats always as on. That last one was missed: the list asked for
 a stored state, found none, and showed the module greyed out as though it were
 switched off, on a card with nothing to switch. page_order() puts wide modules
 last in that list too, so it reads in the same order as the page it links to. render_field() also stopped
@@ -734,12 +738,13 @@ the magnifier fights a lightbox or a custom gallery.
 | File | What it is |
 | --- | --- |
 | socialbump-site-kit.php | constants, updater, hub check, sbsk_log_change(), loads everything |
-| includes/class-sbsk-settings.php | the Modules page, group pages, banner, menu, admin bar |
+| includes/class-sbsk-settings.php | the Features page, group pages, banner, menu, admin bar |
 | includes/class-sbsk-modules.php | finds every module and works out what can run |
 | includes/class-sbsk-release.php | publishing, hub only |
 | includes/class-sbsk-updates.php | the Updates page |
 | includes/class-sbsk-transfer.php | settings export and import |
 | includes/class-sbsk-docs.php | these notes and the Publishing panel |
+| includes/class-sbsk-convert.php | moves the old sbsk_ options onto the sb_tweaks_site_kit_ names, once |
 | assets/js/admin.js | the module cards, the image tools, the rebuild progress |
 
 Every module is includes/modules/<slug>/, with a module.php and one class file
@@ -801,6 +806,51 @@ are the three rules worth reading before you touch it.
 | socialbump_cards (user meta) | each user's card order and collapsed cards, per page key |
 | sbsk_github_token | encrypted, hub only, and deleted on any site that is not the hub |
 | sbsk_pending_changes | notes for the next release, hub only, deleted elsewhere |
+
+## Names, and what is stored where
+
+Site Kit saves almost everything in options. Unlike Bricks Tweaks it writes
+nothing of its own into page content, which is why its rename needed no per
+site conversion: the plugin update is the whole job.
+
+**Options**, renamed in September 2026 so the merge into SocialBUMP Tweaks
+inherits clean data and needs no converter of its own:
+
+| Now | Was |
+| --- | --- |
+| sb_tweaks_site_kit_features | sbsk_modules |
+| sb_tweaks_site_kit_settings | sbsk_module_settings |
+| sb_tweaks_site_kit_groups | sbsk_groups |
+| sb_tweaks_site_kit_faq | sbsk_faq |
+| sb_tweaks_site_kit_faq_fields | sbsk_faq_fields |
+| sb_tweaks_site_kit_image_split | sbsk_image_split |
+| sb_tweaks_site_kit_kept_orphans | sbsk_kept_orphans |
+| sb_tweaks_site_kit_owned_image_sizes | sbsk_owned_image_sizes |
+| sb_tweaks_site_kit_cleaner_sizes (user meta) | sbsk_cleaner_sizes |
+| sb_tweaks_site_kit_groups (the card key inside socialbump_cards) | sbsk_groups |
+
+SBSK_Convert does it on first load, backs the lot up into
+sb_tweaks_site_kit_backup, deletes nothing, and records SCHEME so it runs
+once. Bump SCHEME if the names ever move again. It is hooked at the very top
+of sbsk_boot(), before anything reads a setting: boot once on defaults and
+the site would save those back over what was actually configured.
+
+The GitHub token and the pending release notes keep their sbsk_ names. They
+are hub only, deleted on every client site, and they disappear at the merge.
+
+**Names that are not ours to choose.** faq_questions, faq_question and
+faq_answer stay exactly as they are: sites already hold content under them
+and templates already read them, which is the whole point of the FAQ module
+using them. The registered image size names, image-240 through image-1920,
+stay too: they are written into every attachment's metadata and turn up
+inside Bricks element settings, so renaming one would break every reference
+to it.
+
+The FAQ relationship field was the one exception worth taking. It is
+sb_tweaks_faq_related_<post_type> now, not sbsk_related_. It was renamed
+while no site had used one, because ACF stores values under the field name:
+do it later and every relationship on every post is orphaned. If that ever
+has to change again, it becomes a per site content conversion, not a rename.
 
 ## Where to be careful
 
