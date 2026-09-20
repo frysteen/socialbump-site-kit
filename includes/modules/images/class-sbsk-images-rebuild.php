@@ -11,8 +11,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * recognised as ours later. WordPress, Bricks and WooCommerce sizes, and the
  * original file, are never touched.
  *
- * Optimiser plugins write a WebP next to each file as name.ext.webp, so those
- * siblings are removed alongside the file they belong to.
+ * Optimiser plugins write a WebP or AVIF next to each file (name.ext.webp or
+ * name.ext.avif), so those siblings are removed alongside the file they belong
+ * to.
  */
 class SBSK_Images_Rebuild {
 
@@ -156,7 +157,7 @@ class SBSK_Images_Rebuild {
 		return array_values( array_intersect( array_diff( $have, array_keys( self::all_wanted() ) ), self::owned() ) );
 	}
 
-	/** Remove a generated file and any WebP written beside it. */
+	/** Remove a generated file and any WebP or AVIF written beside it. */
 	/**
 	 * Whether a size file is still used by another size of this attachment, or
 	 * by any other attachment.
@@ -194,7 +195,7 @@ class SBSK_Images_Rebuild {
 	public static function delete_file( $path ) {
 		$removed = 0;
 
-		foreach ( [ $path, $path . '.webp' ] as $file ) {
+		foreach ( [ $path, $path . '.webp', $path . '.avif' ] as $file ) {
 			if ( $file && file_exists( $file ) && is_writable( $file ) ) {
 				wp_delete_file( $file );
 				$removed++;
@@ -455,7 +456,7 @@ class SBSK_Images_Rebuild {
 
 			$path = $folder . '/' . $meta['sizes'][ $name ]['file'];
 
-			foreach ( [ $path, $path . '.webp' ] as $candidate ) {
+			foreach ( [ $path, $path . '.webp', $path . '.avif' ] as $candidate ) {
 				if ( file_exists( $candidate ) ) {
 					$count++;
 				}

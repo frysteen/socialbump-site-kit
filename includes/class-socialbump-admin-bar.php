@@ -243,48 +243,5 @@ if ( ! class_exists( 'SocialBUMP_Admin_Bar' ) ) {
 
 			echo '<style>' . $css . '</style>';
 		}
-
-		/** How strongly coloured a hex value is, from 0 (grey) to 1. */
-		private static function saturation( $hex ) {
-			$raw = ltrim( (string) $hex, '#' );
-
-			if ( strlen( $raw ) === 3 ) {
-				$raw = $raw[0] . $raw[0] . $raw[1] . $raw[1] . $raw[2] . $raw[2];
-			}
-
-			if ( strlen( $raw ) !== 6 ) {
-				return 0;
-			}
-
-			$rgb = [ hexdec( substr( $raw, 0, 2 ) ), hexdec( substr( $raw, 2, 2 ) ), hexdec( substr( $raw, 4, 2 ) ) ];
-			$max = max( $rgb );
-
-			return $max > 0 ? ( $max - min( $rgb ) ) / $max : 0;
-		}
-
-		/** The accent from the admin colour scheme, as the plugin pages use. */
-		private static function accent() {
-			global $_wp_admin_css_colors;
-
-			$scheme = get_user_option( 'admin_color' );
-			$colors = ( $scheme && isset( $_wp_admin_css_colors[ $scheme ]->colors ) ) ? (array) $_wp_admin_css_colors[ $scheme ]->colors : [];
-			$colors = array_values( array_filter( $colors, 'sanitize_hex_color' ) );
-
-			if ( $scheme && ! empty( $_wp_admin_css_colors[ $scheme ]->icon_colors['focus'] ) ) {
-				$focus = sanitize_hex_color( $_wp_admin_css_colors[ $scheme ]->icon_colors['focus'] );
-
-				if ( $focus && self::saturation( $focus ) >= 0.6 ) {
-					return $focus;
-				}
-			}
-
-			if ( count( $colors ) < 2 ) {
-				return '#72aee6';
-			}
-
-			$pair = array_slice( $colors, -2 );
-
-			return self::saturation( $pair[1] ) > self::saturation( $pair[0] ) + 0.15 ? $pair[1] : $pair[0];
-		}
 	}
 }

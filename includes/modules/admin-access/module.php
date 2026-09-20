@@ -59,11 +59,6 @@ return [
 	 * stops people working, so a role added later by a plugin should keep its
 	 * access until you decide otherwise.
 	 */
-	/**
-	 * Ticked roles are blocked, rather than the other way round: losing the admin
-	 * stops people working, so a role added later by a plugin should keep its
-	 * access until you decide otherwise.
-	 */
 	'settings'    => array_merge(
 		$sbsk_admin_access_settings,
 		[

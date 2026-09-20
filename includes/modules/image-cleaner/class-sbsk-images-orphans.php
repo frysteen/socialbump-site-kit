@@ -99,10 +99,11 @@ class SBSK_Images_Orphans {
 		return $known;
 	}
 
-	/** Note a file and the WebP an optimiser may have written beside it. */
+	/** Note a file and the WebP or AVIF an optimiser may have written beside it. */
 	private static function add( array &$known, $path ) {
 		$known[ $path ]            = true;
 		$known[ $path . '.webp' ] = true;
+		$known[ $path . '.avif' ] = true;
 	}
 	/**
 	 * Files that live in uploads but are not uploads: index files WordPress drops
@@ -222,8 +223,8 @@ class SBSK_Images_Orphans {
 
 		$name = strtolower( basename( $path ) );
 
-		// A WebP written by an optimiser keeps the original extension in front of it.
-		$name = preg_replace( '/\.webp$/', '', $name );
+		// A WebP or AVIF written by an optimiser keeps the original extension in front of it.
+		$name = preg_replace( '/\.(webp|avif)$/', '', $name );
 
 		$extension = pathinfo( $name, PATHINFO_EXTENSION );
 
@@ -473,14 +474,47 @@ class SBSK_Images_Orphans {
 			}
 		};
 
-		$collect( $wpdb->get_col( $wpdb->prepare( "SELECT post_content FROM {$wpdb->posts} WHERE post_content LIKE %s AND post_type <> 'revision' LIMIT 5000", $like ) ) );
+		// Read in pages keyed by the primary key, so a big site is covered in
+		// full. A row cap could miss a real use past it, and a missed use is a
+		// file wrongly listed as an orphan.
+		$after = 0;
+
+		do {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_content FROM {$wpdb->posts} WHERE ID > %d AND post_content LIKE %s AND post_type <> 'revision' ORDER BY ID ASC LIMIT 2000", $after, $like ) );
+
+			foreach ( $rows as $row ) {
+				$after = (int) $row->ID;
+			}
+
+			$collect( wp_list_pluck( $rows, 'post_content' ) );
+		} while ( count( $rows ) === 2000 );
 
 		$skip = array_merge( [ '_wp_attachment_metadata', '_wp_attached_file', '_wp_attachment_backup_sizes' ], self::bookkeeping_keys() );
 		$hold = implode( ',', array_fill( 0, count( $skip ), '%s' ) );
 
-		$collect( $wpdb->get_col( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_value LIKE %s AND meta_key NOT IN ( {$hold} ) LIMIT 20000", array_merge( [ $like ], $skip ) ) ) );
+		$after = 0;
 
-		$collect( $wpdb->get_col( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_value LIKE %s AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' LIMIT 2000", $like ) ) );
+		do {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT meta_id, meta_value FROM {$wpdb->postmeta} WHERE meta_id > %d AND meta_value LIKE %s AND meta_key NOT IN ( {$hold} ) ORDER BY meta_id ASC LIMIT 5000", array_merge( [ $after, $like ], $skip ) ) );
+
+			foreach ( $rows as $row ) {
+				$after = (int) $row->meta_id;
+			}
+
+			$collect( wp_list_pluck( $rows, 'meta_value' ) );
+		} while ( count( $rows ) === 5000 );
+
+		$after = 0;
+
+		do {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_id, option_value FROM {$wpdb->options} WHERE option_id > %d AND option_value LIKE %s AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' ORDER BY option_id ASC LIMIT 2000", $after, $like ) );
+
+			foreach ( $rows as $row ) {
+				$after = (int) $row->option_id;
+			}
+
+			$collect( wp_list_pluck( $rows, 'option_value' ) );
+		} while ( count( $rows ) === 2000 );
 
 		set_transient( $key, $names, 10 * MINUTE_IN_SECONDS );
 

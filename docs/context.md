@@ -186,7 +186,7 @@ group and Select all and none at the bottom. Whatever is ticked is what the scan
 counts, what Build fills in, what a forced rebuild remakes, and what Remove old
 sizes clears. It replaced the picker that only appeared when forcing.
 
-The choice is per user, in the sbsk_cleaner_sizes user meta, and everything is
+The choice is per user, in the sb_tweaks_site_kit_cleaner_sizes user meta, and everything is
 ticked until a choice is saved. A name that is no longer registered is dropped on
 the way out of chosen(), so removing a width cannot leave a stale tick behind.
 
@@ -338,8 +338,12 @@ run logs every image, because there the skipped ones are the interesting part.
   file), the original itself, or any other attachment whose metadata names
   the file. That last check is one LIKE on postmeta per stale file.
 - A run holds its id list in a transient for ten minutes (sbsk_images_run_ per
-  user; sbsk_orphans_run_ for the orphan list) instead of every batch fetching
-  the whole library again. Scan starts a run fresh; the last batch clears it.
+  user and per mode; sbsk_orphans_run_ for the orphan list) instead of every
+  batch fetching the whole library again. One list per tool: a build, a clean
+  and a forced rebuild each keep their own, so switching tools mid run cannot
+  hand one the other's ids. ids() also warms the attachment meta cache in
+  chunks of 500, so a scan reads metadata in a handful of queries rather than
+  one per image. Scan starts a run fresh; the last batch clears it.
   The orphan run steps a whole batch on each time because the list is fixed;
   remove() checks every file again before touching it, so a list gone a
   little stale costs nothing.
@@ -535,13 +539,18 @@ out of the count.
 
 The reference check reads the content once rather than once per file.
 mentioned_names() pulls every image file name out of post content, postmeta and
-options in three queries and holds the set for ten minutes; after that a check is
+options, paged through by id so no row is ever left unread on a big site, and
+holds the set for ten minutes; after that a check is
 an array lookup, and only a name that is actually mentioned costs a query, to say
 what is using it. It was three LIKE scans per file before, each reading a whole
 table, so a site with 685 orphans spent 64 seconds on a scan that is otherwise
 a fifth of a second. Batching the names into one OR'd query does not help,
 because the LIKEs still scan; reading the content once is the only fix. Measured
 on doogood.com.au: 64s to 0.24s, plus 0.28s to build the index, same answers.
+The index used to stop at a fixed row cap per table, and rows past the cap were
+invisible: on a big Bricks site a used file could be called an orphan because
+the row naming it was never read. It pages through everything now. Do not put a
+cap back.
 
 The index is rebuilt at the start of every scan, not reused from the transient,
 because a scan answers for the site as it is now: content deleted since the last
@@ -579,8 +588,8 @@ sends.
   original and loses manual crops. It builds size by size instead.
 - Sizes the kit did not create are left alone. sbsk_owned_image_sizes records
   what it made, so a theme size is never cleared as though it were ours.
-- Removing a size deletes the file, the WebP beside it, and the metadata entry,
-  in one pass. The metadata matters as much as the file: an entry pointing at a
+- Removing a size deletes the file, the WebP and AVIF copies beside it, and the
+  metadata entry, in one pass. The metadata matters as much as the file: an entry pointing at a
   deleted file makes WordPress hand out a URL for an image that is not there.
 
 #### Rebuilding
@@ -609,11 +618,12 @@ sends.
   reading it, every edited image contributed a pile of false orphans, and
   deleting them would have quietly taken the undo away. If a site ever shows
   orphans that are plainly in use, look for another meta key like that one.
-- Every known file is recorded along with its WebP twin, since an optimiser
-  writes photo.jpg.webp, keeping the original extension in front. The scan
-  strips the .webp before checking the extension, so those count as images.
+- Every known file is recorded along with its WebP and AVIF twins, since an
+  optimiser writes photo.jpg.webp or photo.jpg.avif, keeping the original
+  extension in front. The scan strips the .webp or .avif before checking the
+  extension, so those count as images.
 - A leftover thumbnail from an attachment that no longer exists is found, and
-  so is its WebP. Tested by planting three such files and scanning.
+  so are its WebP and AVIF copies. Tested by planting such files and scanning.
 - It walks the uploads root and its year and month folders only. A folder
   belonging to another plugin is left alone on purpose.
 - Anything referenced anywhere, or marked Keep, is listed but never bulk
@@ -795,14 +805,14 @@ are the three rules worth reading before you touch it.
 
 | Name | Holds |
 | --- | --- |
-| sbsk_modules | which modules are on |
-| sbsk_groups | which groups are on |
-| sbsk_module_settings | each module settings |
-| sbsk_owned_image_sizes | image sizes the kit created |
-| sbsk_kept_orphans | files in uploads it was told to leave alone, kept as paths relative to the uploads folder |
-| sbsk_image_split | that the Image Cleaner split migration has run, and which scheme |
-| sbsk_cleaner_sizes (user meta) | the sizes each user has ticked on the Image Cleaner page |
-| sbsk_images_run_<user>, sbsk_orphans_run_<user> (transients) | the id or path list held for a run, ten minutes |
+| sb_tweaks_site_kit_features | which modules are on |
+| sb_tweaks_site_kit_groups | which groups are on |
+| sb_tweaks_site_kit_settings | each module settings |
+| sb_tweaks_site_kit_owned_image_sizes | image sizes the kit created |
+| sb_tweaks_site_kit_kept_orphans | files in uploads it was told to leave alone, kept as paths relative to the uploads folder |
+| sb_tweaks_site_kit_image_split | that the Image Cleaner split migration has run, and which scheme |
+| sb_tweaks_site_kit_cleaner_sizes (user meta) | the sizes each user has ticked on the Image Cleaner page |
+| sbsk_images_run_<user>_<mode>, sbsk_orphans_run_<user> (transients) | the id or path list held for a run, ten minutes, one per tool so a build and a clean never share a list |
 | socialbump_cards (user meta) | each user's card order and collapsed cards, per page key |
 | sbsk_github_token | encrypted, hub only, and deleted on any site that is not the hub |
 | sbsk_pending_changes | notes for the next release, hub only, deleted elsewhere |

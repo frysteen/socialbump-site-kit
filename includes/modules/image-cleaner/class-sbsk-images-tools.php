@@ -67,7 +67,9 @@ class SBSK_Images_Tools {
 	 * visible. A forced rebuild remakes everything, so it keeps the whole list.
 	 */
 	private static function ids( $for_run = false, $mode = '' ) {
-		$key = 'sbsk_images_run_' . get_current_user_id();
+		// Keyed by mode as well as user: a cancelled build must never hand its
+		// list to a clean that starts within the ten minutes.
+		$key = 'sbsk_images_run_' . get_current_user_id() . '_' . ( $mode !== '' ? $mode : 'build' );
 
 		if ( $for_run ) {
 			$held = get_transient( $key );
@@ -78,6 +80,8 @@ class SBSK_Images_Tools {
 		}
 
 		$ids = self::query_ids();
+
+		self::prime( $ids );
 
 		if ( $for_run && ( $mode === 'build' || $mode === 'clean' ) ) {
 			$only  = SBSK_Images_Cleaner::chosen();
@@ -104,9 +108,24 @@ class SBSK_Images_Tools {
 		return $ids;
 	}
 
-	/** Forget the list held for a run. */
+	/** Forget the lists held for a run, whichever mode they were for. */
 	private static function forget_run() {
-		delete_transient( 'sbsk_images_run_' . get_current_user_id() );
+		foreach ( [ 'build', 'clean', 'force' ] as $mode ) {
+			delete_transient( 'sbsk_images_run_' . get_current_user_id() . '_' . $mode );
+		}
+	}
+
+	/**
+	 * Warm the meta cache for a set of ids, in slices.
+	 *
+	 * Fetching ids alone leaves the meta cache cold, so every
+	 * wp_get_attachment_metadata() in a scan was its own query: thousands of
+	 * them on a big library. One cache load per five hundred ids instead.
+	 */
+	private static function prime( array $ids ) {
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			update_meta_cache( 'post', $chunk );
+		}
 	}
 
 	private static function query_ids() {

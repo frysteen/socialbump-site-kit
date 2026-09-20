@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.13
+Stable tag: 1.1.14
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,10 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.14 =
+* Image Cleaner: the in-use check now covers every row on very large sites instead of stopping early, AVIF copies made by optimiser plugins are tidied away alongside WebP ones, and big scans run with far fewer database queries.
+* General tidy-up: removed a duplicated comment, fixed indentation in the main file, and stripped unused code from the shared admin bar class.
+
 = 1.1.13 =
 * The Modules page is now called Features, to leave the word Modules free for what these plugins are about to become inside SocialBUMP Tweaks. Nothing on it has changed.
 * Settings are now saved under sb_tweaks_site_kit_ names, ready for the move into the combined plugin. Everything you have set is converted automatically the first time the site loads after updating, including the image sizes the kit owns, the files the cleaner was told to leave alone, the sizes you had ticked on the Image Cleaner page and your card arrangement. The old settings are left in place and backed up.
