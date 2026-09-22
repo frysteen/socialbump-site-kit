@@ -1420,3 +1420,54 @@ plugin's own releases appended from then on.
 Do it deliberately, on one site first, not as a big bang.
 
 <!-- shared:end -->
+
+## Robots.txt
+
+includes/modules/robots-txt, section seo, off by default. SBSK_Robots::filter() on
+robots_txt at priority 100 replaces the whole output. Rank Math hooks the same
+filter at 0 (its Sitemap line) and 10 (whatever is saved in its robots.txt
+editor), so its content simply stops being served; nothing needs switching off
+in Rank Math, though the page flags a non-empty Rank Math editor so nobody edits
+the wrong one. SEO for AI adds its llms.txt comment lines at 110, after us.
+
+The file is User-agent: *, the saved rules (settings robots-txt.rules, rows of
+type allow or disallow plus a path), the extra lines (robots-txt.extra, added as
+written), then a Sitemap line from sitemap_url(): Rank Math's sitemap_index.xml
+when its sitemap module is on, then Yoast's, then WordPress's own wp-sitemap.xml,
+filterable with sbsk/robots_txt/sitemap_url. The whole file can be changed on
+sbsk/robots_txt. No saved rules means DEFAULT_RULES; Reset to default rules puts
+those back and keeps the extra lines. clean_path() strips whitespace, quotes and
+angle brackets and adds a leading slash.
+
+The defaults were reviewed in September 2026 against the list used since 2025:
+/wp-content/plugins/, /wp-content/themes/ and /wp-includes/ are no longer
+blocked (Google renders pages and needs that CSS and JavaScript), /*/search
+became /search/ (the old pattern blocked any page whose later path segment
+started with search, like /services/search-engine-optimisation/), and the utm_,
+fbclid, gclid, mc_ and ref lines went in favour of the SEO plugin's canonicals.
+
+Two things the page warns about: a physical robots.txt in the site root, which
+the web server sends without asking WordPress, so nothing here is live until it
+is deleted; and a site set to discourage search engines, where WordPress's own
+Disallow: / is left alone. The Live robots.txt panel runs the real filter chain,
+so it shows exactly what /robots.txt serves, other plugins' lines included.
+
+The page is the SEO tab, sb-site-kit-seo: Site Kit names module pages after the
+section, not the module, so the save redirects with group_page_slug( 'seo' ). A
+module's page shows even while the module is off, and a module's boot only runs
+while it is on, which caught this page twice: the render loads the class itself,
+and the save handler is registered in module.php (sbsk_robots_save(), guarded by
+function_exists) so rules can be set up and saved before switching on. The switch
+in the Rules panel is the module's own switch: saving writes robots-txt into the
+features option, and switching on also turns the seo group on. While off, a note
+under the heading says the rules are saved but not served. Reset to default rules
+is disabled when the rows already match DEFAULT_RULES (checked in PHP on load and
+in the page script as rows change; save-state.js leaves data-sb-always-on buttons
+alone). Rows are tinted light red for Disallow and light green for Allow with
+:has() on the dropdown, so no script is involved. The sitemap address under Extra
+lines links to the sitemap itself.
+
+These three traps (page without its class, save only registered on boot, redirect
+by module id) are what the SocialBUMP Tweaks framework already handles centrally;
+any other Site Kit module page that shows while off is worth checking for them
+until Site Kit moves into the framework.

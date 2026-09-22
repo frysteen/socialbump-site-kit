@@ -2342,3 +2342,108 @@ a.sb-toggle:focus {
 	font-size: 12px;
 	color: #c3c4c7;
 }
+
+/* Robots.txt page: rules on the left, extra lines and the live file on the right. */
+.sbsk-robots {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 20px;
+	align-items: start;
+}
+
+.sbsk-robots .sbsk-section {
+	margin: 0;
+}
+
+.sbsk-robots__side {
+	display: grid;
+	gap: 20px;
+	align-content: start;
+}
+
+.sbsk-rules {
+	display: flex;
+	flex-direction: column;
+}
+
+.sbsk-rule {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 0;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.sbsk-rule:last-child {
+	border-bottom: 0;
+}
+
+.sbsk-rule__type {
+	flex: none;
+	width: 120px;
+}
+
+.sbsk-rule__path {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-family: Menlo, Consolas, monospace;
+	font-size: 13px;
+}
+
+.wp-core-ui .button-link.sbsk-rule__remove {
+	flex: none;
+	color: #d63638;
+	font-weight: 700;
+	font-size: 15px;
+	text-decoration: none;
+}
+
+.wp-core-ui .button-link.sbsk-rule__remove:hover {
+	color: #a00;
+}
+
+.sbsk-robots__live {
+	margin: 0;
+	padding: 14px 16px;
+	max-height: 520px;
+	overflow: auto;
+	background: #16171d;
+	color: #e7e8ea;
+	border-radius: 6px;
+	font-size: 12px;
+	line-height: 1.6;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+@media (max-width: 1100px) {
+	.sbsk-robots {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.sbsk-robots__off {
+	margin: 0 0 12px;
+	padding: 10px 14px;
+	background: #fcf9e8;
+	border-left: 4px solid #dba617;
+	color: #50575e;
+}
+
+/* Rule rows tinted by type: light red for Disallow, light green for Allow.
+   :has() follows the dropdown live, so a changed row recolours straight away. */
+.sbsk-rule {
+	padding: 8px 10px;
+	margin-bottom: 6px;
+	border-bottom: 0;
+	border-radius: 6px;
+	background: #fcf0f1;
+}
+
+.sbsk-rule:has(.sbsk-rule__type option[value="allow"]:checked) {
+	background: #edfaef;
+}
+
+.sbsk-rule:last-child {
+	margin-bottom: 0;
+}

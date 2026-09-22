@@ -993,6 +993,10 @@ class SBSK_Settings {
 				'title'       => __( 'WooCommerce', 'sb-site-kit' ),
 				'description' => __( 'Corrections and tweaks for the WooCommerce admin.', 'sb-site-kit' ),
 			],
+			'seo'        => [
+				'title'       => __( 'SEO', 'sb-site-kit' ),
+				'description' => __( 'The robots.txt search engines and other crawlers read.', 'sb-site-kit' ),
+			],
 			'admin'      => [
 				'title'       => __( 'Admin Settings', 'sb-site-kit' ),
 				'description' => __( 'How the WordPress admin looks and who gets to use it.', 'sb-site-kit' ),
