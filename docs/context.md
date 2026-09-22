@@ -161,6 +161,41 @@ the cleaner is on. The old rebuild_on switch became the cleaner's group switch:
 sbsk_split_image_cleaner() in the main file carries it across once, records
 scheme 2 in sbsk_image_split, and drops rebuild_on from the settings.
 
+
+**Tidy titles on upload.** clean_title() keeps a name that already has spaces
+exactly as typed, minus the extension, so "Epoxy Flooring Warranties - UV
+Stability" survives with its dash and capitals. A name with no spaces is slug or
+camera style: dashes, underscores and dots become spaces, other punctuation goes,
+and each word gets a capital first letter without the rest being lowered, so
+sdi-UV-test becomes Sdi UV Test. It used to strip every dash and title-case with
+mb_convert_case, which also lowered the rest of each word (UV became Uv). Alt
+text copies the cleaned title, only when the image has none.
+
+**Gutenberg image zoom** (class-sbsk-images-zoom.php, gallery-zoom-editor.js,
+gallery-zoom.js, gallery-zoom.css): switched on under Image extras on the Images
+page, setting gallery_zoom (the key kept its first name). The core gallery and
+image blocks gain two attributes via the blocks.registerBlockType filter
+(sbskZoom, sbskZoomSize) and a Zoom sidebar panel: a toggle and the popup size,
+fed by size_choices(), which lists every registered size with its width. The
+size on the page is deliberately left to each block's own Resolution setting;
+an earlier build had its own page-size dropdown and it duplicated that. An image
+block inside a gallery hides the panel (getBlockParentsByBlockName), since the
+gallery's setting governs its images. On the front end render_block_core/gallery
+and render_block_core/image mark each wp-image-<id> img with data-sbsk-zoom,
+the popup size URL, through the WP HTML Tag Processor, and the lightbox assets
+enqueue once from whichever block rendered first. The popup is our own: a
+gallery's images page through with arrows and arrow keys, a single image opens
+alone, Esc or a click on the dark area closes, captions come from the
+figcaption. The native WordPress lightbox was no use here because it always
+opens the full-size original. The popup size is validated against
+get_intermediate_image_sizes() at render, falling back to full. Everything
+steps aside when the switch is off; the block attributes simply sit unused in
+the saved markup.
+
+On a Bricks site the gallery's columns, cropping and gaps depend on Bricks
+Tweaks' Gutenberg Block Styles, because Bricks strips core's block CSS on the
+pages it renders. Zoom itself works either way.
+
 #### The rule that everything else depends on
 
 A size counts as present only when its file is really there. Metadata is not
@@ -1281,6 +1316,13 @@ folder, and anything not carried back to the hub is gone.
 
 ### Things learned the hard way
 
+- **form.requestSubmit() only accepts a real submit button.** Pass it a button
+  with type=button, which is what data-sb-save allows, and the browser throws
+  and nothing is sent, while the button and the reminder both look exactly
+  right. SEO for AI's save button is type=button, so its settings pages
+  silently stopped saving. save-state.js now passes the button only when its
+  type is submit, and otherwise calls requestSubmit() with nothing. Found on
+  21 September 2026.
 - PHP declares top level classes and functions while compiling the file, before
   a line of it runs. A class_exists() guard inside the file that declares the
   class always sees its own class and returns, and the file never finishes. This

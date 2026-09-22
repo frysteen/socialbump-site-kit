@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.14
+Stable tag: 1.1.15
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,11 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.15 =
+* Made the Save changes button more robust, so a save button that is not a standard form submit button still saves.
+* Images: new Gutenberg image zoom option. Switch it on under Image extras and the gallery and image blocks get an Enable zoom toggle and a popup size, while the size on the page stays the block's own Resolution setting. The popup has arrows through a gallery, captions and keyboard support. An image inside a gallery follows the gallery's setting.
+* Images: tidying the file name on upload no longer mangles names typed by hand. A name with spaces is kept exactly as written, dashes and capitals included, and slug-style names get capitals without the rest of each word being lowered, so UV stays UV.
+
 = 1.1.14 =
 * Image Cleaner: the in-use check now covers every row on very large sites instead of stopping early, AVIF copies made by optimiser plugins are tidied away alongside WebP ones, and big scans run with far fewer database queries.
 * General tidy-up: removed a duplicated comment, fixed indentation in the main file, and stripped unused code from the shared admin bar class.

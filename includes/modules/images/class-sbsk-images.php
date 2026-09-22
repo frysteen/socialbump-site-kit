@@ -23,6 +23,9 @@ class SBSK_Images {
 		add_action( 'add_attachment', [ __CLASS__, 'on_upload' ] );
 		add_action( 'admin_post_sbsk_save_images', [ __CLASS__, 'save' ] );
 		require_once __DIR__ . '/class-sbsk-images-rebuild.php';
+		require_once __DIR__ . '/class-sbsk-images-zoom.php';
+
+		SBSK_Images_Zoom::boot();
 	}
 
 	public static function setting( $key, $fallback = null ) {
@@ -73,19 +76,44 @@ class SBSK_Images {
 
 	/**
 	 * Turn a raw filename into readable words.
-	 * IMG_2025-final.copy(1).JPG becomes Img 2025 Final Copy 1.
+	 *
+	 * A name that already has spaces was typed by a person, so it is kept
+	 * exactly as written: only the extension comes off and stray whitespace is
+	 * tidied. Dashes, capitals and punctuation all stay, so
+	 * "Epoxy Flooring Warranties - UV Stability" is left alone.
+	 *
+	 * A name with no spaces is slug or camera style, so its joiners become
+	 * spaces and each word gets a capital first letter without the rest being
+	 * lowered: IMG_2025-final.copy(1).JPG becomes IMG 2025 Final Copy 1, and
+	 * sdi-UV-test becomes Sdi UV Test.
 	 */
 	public static function clean_title( $text ) {
-		$text = preg_replace( '/\.[a-z0-9]{2,4}$/i', '', (string) $text );
-		$text = str_replace( [ '-', '_', '.' ], ' ', $text );
-		$text = preg_replace( '/[^\p{L}\p{N} ]+/u', ' ', $text );
-		$text = trim( preg_replace( '/\s+/', ' ', $text ) );
+		$text = trim( preg_replace( '/\.[a-z0-9]{2,4}$/i', '', (string) $text ) );
 
 		if ( $text === '' ) {
 			return '';
 		}
 
-		return function_exists( 'mb_convert_case' ) ? mb_convert_case( $text, MB_CASE_TITLE, 'UTF-8' ) : ucwords( strtolower( $text ) );
+		if ( preg_match( '/\s/u', $text ) ) {
+			return trim( preg_replace( '/\s+/u', ' ', $text ) );
+		}
+
+		$text = str_replace( [ '-', '_', '.' ], ' ', $text );
+		$text = preg_replace( '/[^\p{L}\p{N} ]+/u', ' ', $text );
+		$text = trim( preg_replace( '/\s+/u', ' ', $text ) );
+
+		if ( $text === '' ) {
+			return '';
+		}
+
+		$words = explode( ' ', $text );
+		$mb    = function_exists( 'mb_substr' ) && function_exists( 'mb_strtoupper' );
+
+		foreach ( $words as $key => $word ) {
+			$words[ $key ] = $mb ? mb_strtoupper( mb_substr( $word, 0, 1, 'UTF-8' ), 'UTF-8' ) . mb_substr( $word, 1, null, 'UTF-8' ) : ucfirst( $word );
+		}
+
+		return implode( ' ', $words );
 	}
 
 	/**
@@ -210,6 +238,7 @@ class SBSK_Images {
 			'sizes'        => $clean ? $clean : self::DEFAULT_WIDTHS,
 			'clean_titles' => empty( $_POST['sbsk_clean_titles'] ) ? 0 : 1,
 			'auto_alt'     => empty( $_POST['sbsk_auto_alt'] ) ? 0 : 1,
+			'gallery_zoom' => empty( $_POST['sbsk_gallery_zoom'] ) ? 0 : 1,
 		];
 
 		update_option( SBSK_Modules::SETTINGS_OPTION, $settings );
@@ -270,11 +299,21 @@ class SBSK_Images {
 
 		echo '</section>';
 
+		// On upload and Image extras share the right-hand column.
+		echo '<div class="sbsk-images__side">';
+
 		// On upload
 		echo '<section class="sbsk-section"><div class="sbsk-section__head"><h2>' . esc_html__( 'On upload', 'sb-site-kit' ) . '</h2></div><div class="sbsk-grid">';
 		echo self::checkbox( 'sbsk_clean_titles', (bool) self::setting( 'clean_titles', 1 ), __( 'Clean up the image file name on upload', 'sb-site-kit' ), __( 'Turns the media title into readable words. The file on disk is not renamed.', 'sb-site-kit' ) );
 		echo self::checkbox( 'sbsk_auto_alt', (bool) self::setting( 'auto_alt', 1 ), __( 'Add ALT text on upload', 'sb-site-kit' ), __( 'Only when the image has none. Existing alt text is never changed.', 'sb-site-kit' ) );
 		echo '</div></section>';
+
+		// Image extras
+		echo '<section class="sbsk-section"><div class="sbsk-section__head"><h2>' . esc_html__( 'Image extras', 'sb-site-kit' ) . '</h2></div><div class="sbsk-grid">';
+		echo self::checkbox( 'sbsk_gallery_zoom', (bool) self::setting( 'gallery_zoom', 0 ), __( 'Gutenberg image zoom', 'sb-site-kit' ), __( 'The gallery and image blocks get an Enable zoom option and a popup size. The size on the page stays the block\'s own Resolution setting.', 'sb-site-kit' ) );
+		echo '</div></section>';
+
+		echo '</div>';
 
 		echo '</div>';
 

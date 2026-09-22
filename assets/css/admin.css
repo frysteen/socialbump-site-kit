@@ -494,6 +494,13 @@ a.sbsk-header__version.is-outdated:focus {
 	margin: 0;
 }
 
+/* On upload and Image extras stack in the right-hand column. */
+.sbsk-images__side {
+	display: grid;
+	gap: 20px;
+	align-content: start;
+}
+
 .sbsk-widths {
 	display: flex;
 	flex-direction: column;

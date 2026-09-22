@@ -20,6 +20,7 @@ return [
 			[ 'label' => __( 'Image sizes', 'sb-site-kit' ), 'on' => (bool) SBSK_Images::setting( 'sizes_on', 1 ) ],
 			[ 'label' => __( 'Clean up the image file name on upload', 'sb-site-kit' ), 'on' => (bool) SBSK_Images::setting( 'clean_titles', 1 ) ],
 			[ 'label' => __( 'Add ALT text on upload', 'sb-site-kit' ), 'on' => (bool) SBSK_Images::setting( 'auto_alt', 1 ) ],
+			[ 'label' => __( 'Gutenberg image zoom', 'sb-site-kit' ), 'on' => (bool) SBSK_Images::setting( 'gallery_zoom', 0 ) ],
 		];
 	},
 
