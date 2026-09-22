@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.15
+Stable tag: 1.1.16
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.16 =
+* Images: alt text and tidied titles on upload now keep a dash as a dash. The title was being read after WordPress had turned " - " into an HTML code, which ended up in the alt text as numbers.
+
 = 1.1.15 =
 * Made the Save changes button more robust, so a save button that is not a standard form submit button still saves.
 * Images: new Gutenberg image zoom option. Switch it on under Image extras and the gallery and image blocks get an Enable zoom toggle and a popup size, while the size on the page stays the block's own Resolution setting. The popup has arrows through a gallery, captions and keyboard support. An image inside a gallery follows the gallery's setting.

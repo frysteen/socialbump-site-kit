@@ -171,6 +171,11 @@ sdi-UV-test becomes Sdi UV Test. It used to strip every dash and title-case with
 mb_convert_case, which also lowered the rest of each word (UV became Uv). Alt
 text copies the cleaned title, only when the image has none.
 
+on_upload() reads the stored title with get_post_field( 'post_title', $id, 'raw' ),
+not get_the_title(): that runs wptexturize, which turns " - " into &#8211;, and the
+entity ended up in the alt text (shown as 8211 by the old cleaner, as &#8211; by
+1.1.15). clean_title() also decodes entities first, as a second guard.
+
 **Gutenberg image zoom** (class-sbsk-images-zoom.php, gallery-zoom-editor.js,
 gallery-zoom.js, gallery-zoom.css): switched on under Image extras on the Images
 page, setting gallery_zoom (the key kept its first name). The core gallery and

@@ -88,7 +88,9 @@ class SBSK_Images {
 	 * sdi-UV-test becomes Sdi UV Test.
 	 */
 	public static function clean_title( $text ) {
-		$text = trim( preg_replace( '/\.[a-z0-9]{2,4}$/i', '', (string) $text ) );
+		// Any HTML entity back to its character first, so &#8211; is a dash, not numbers.
+		$text = html_entity_decode( (string) $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$text = trim( preg_replace( '/\.[a-z0-9]{2,4}$/i', '', $text ) );
 
 		if ( $text === '' ) {
 			return '';
@@ -126,7 +128,9 @@ class SBSK_Images {
 			return;
 		}
 
-		$raw   = get_the_title( $post_id );
+		// The stored title, not get_the_title(): that runs the typography filter,
+		// which turns " - " into &#8211; and the entity ended up in the alt text.
+		$raw   = html_entity_decode( (string) get_post_field( 'post_title', $post_id, 'raw' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		$clean = self::clean_title( $raw );
 
 		if ( self::setting( 'clean_titles', 1 ) && $clean !== '' && $clean !== $raw ) {
