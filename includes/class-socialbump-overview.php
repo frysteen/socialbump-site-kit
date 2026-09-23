@@ -76,6 +76,10 @@ if ( ! class_exists( 'SocialBUMP_Overview' ) ) {
 		 * each plugin own menu already says what it does.
 		 */
 		public static function available() {
+			// Retired: SocialBUMP Tweaks' Installs page on the hub does this job now.
+			// The brand icon below is still used by the plugins' own menus.
+			return false;
+
 			if ( count( self::$plugins ) < 2 ) {
 				return false;
 			}

@@ -11,9 +11,13 @@ if ( ! defined( 'ABSPATH' ) ) {
  * installed. Each one then registers what it wants shown and this draws the
  * result once.
  *
- * With a single plugin active it draws that plugin on the bar exactly as it
- * would on its own. With more than one it draws a single SocialBUMP item, each
- * plugin sitting inside it with its pages on a flyout.
+ * Each plugin is drawn on the bar by itself, with its pages underneath. They
+ * used to share one SocialBUMP item when more than one was active; that item
+ * now belongs to SocialBUMP Tweaks and its modules. A standalone plugin that
+ * SocialBUMP Tweaks already has a module for is claimed through the
+ * socialbump/admin_bar/claim filter and drawn inside that item instead, where
+ * its module would sit (on the hub, which runs the standalone plugins to
+ * publish them).
  *
  * The dot carries the status: green when there is nothing to do, amber when
  * something wants attention. A plugin that is amber makes the SocialBUMP item
@@ -98,6 +102,20 @@ if ( ! class_exists( 'SocialBUMP_Admin_Bar' ) ) {
 			}
 
 			$plugins = self::$plugins;
+
+			// Each standalone plugin on its own. The combined item is SocialBUMP
+			// Tweaks' now, and the old grouping below is kept only for reference.
+			foreach ( $plugins as $plugin ) {
+				// SocialBUMP Tweaks takes the plugins it has a module for into its own
+				// SocialBUMP item, where the module would sit.
+				if ( apply_filters( 'socialbump/admin_bar/claim', false, $plugin ) ) {
+					continue;
+				}
+
+				self::add_plugin( $bar, $plugin, false );
+			}
+
+			return;
 
 			if ( count( $plugins ) === 1 ) {
 				$only = reset( $plugins );
