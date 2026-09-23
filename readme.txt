@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.22
+Stable tag: 1.1.23
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.23 =
+* Reports to the hub are more reliable: a check-in now waits for the hub to confirm it (a lost one is tried again later, rather than a day later), and after an update pushed from the hub the site sends its new state back in its answer, so the Installs page is right straight away.
+
 = 1.1.22 =
 * Can now be moved into SocialBUMP Tweaks from the hub's Installs page: the hub can tell a site to install SocialBUMP Tweaks, which then takes over from the standalone plugins it has modules for, keeping their settings. It can install that plugin only, only from its own GitHub release, and only when signed by the hub.
 * Admin bar: this plugin now always sits on the bar by itself rather than being grouped under SocialBUMP, which belongs to SocialBUMP Tweaks now, and the SocialBUMP Hub admin page is retired in favour of the Installs page on the hub.
