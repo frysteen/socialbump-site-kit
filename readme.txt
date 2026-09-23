@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.17
+Stable tag: 1.1.18
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.18 =
+* Reports to the SocialBUMP hub which SocialBUMP plugins this site has, their versions and whether each is active, whenever one changes and once a day, so the hub can show what is installed where. Only the site address and name, those plugin versions, and the WordPress and PHP versions are sent.
+
 = 1.1.17 =
 * New SEO page, Robots.txt: serves the SocialBUMP robots.txt from Site Kit. Each allow and disallow rule is its own row (tinted red or green) that can be edited, added or removed, with a reset to the default rules that only lights up when something differs, a box for extra lines, and the sitemap address worked out for the site. It has its own on and off switch on the page, can be set up and saved while off, takes over from Rank Math's robots.txt editor, and shows the live file, with a warning if a physical robots.txt file would override it.
 
