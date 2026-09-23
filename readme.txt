@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.18
+Stable tag: 1.1.19
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.19 =
+* Deactivating a SocialBUMP plugin now reports it to the hub as deactivated. WordPress announces a deactivation before saving it, so the report used to still say active.
+
 = 1.1.18 =
 * Reports to the SocialBUMP hub which SocialBUMP plugins this site has, their versions and whether each is active, whenever one changes and once a day, so the hub can show what is installed where. Only the site address and name, those plugin versions, and the WordPress and PHP versions are sent.
 
