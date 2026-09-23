@@ -3,7 +3,7 @@
  * Plugin Name: SocialBUMP Site Kit
  * Plugin URI:  https://socialbump.com.au
  * Description: SocialBUMP base styling, ACF fields, shortcodes and admin tweaks. Switch each feature on or off under SB Site Kit.
- * Version:     1.1.19
+ * Version:     1.1.20
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author:      SocialBUMP
@@ -19,14 +19,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 // Tells the SocialBUMP hub this site has the plugin, its version and whether it is active.
 require_once __DIR__ . '/includes/class-socialbump-reporter.php';
 
-define( 'SBSK_VERSION', '1.1.19' );
+define( 'SBSK_VERSION', '1.1.20' );
 define( 'SBSK_FILE', __FILE__ );
 define( 'SBSK_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SBSK_URL', plugin_dir_url( __FILE__ ) );
 define( 'SBSK_OPTION', 'sb_tweaks_site_kit_features' );
 define( 'SBSK_SLUG', 'socialbump-site-kit' );
 define( 'SBSK_GITHUB_REPO', 'frysteen/socialbump-site-kit' );
-define( 'SBSK_HUB_HOST', 'bricks.socialbump.com.au' );
+define( 'SBSK_HUB_HOST', 'plugins.socialbump.com.au' );
 
 /**
  * Updates come from GitHub Releases. A release only counts as an update

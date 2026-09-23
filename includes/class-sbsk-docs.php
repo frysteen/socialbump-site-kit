@@ -123,7 +123,7 @@ class SBSK_Docs {
 		}
 
 		$prompt  = 'You are picking up work on SocialBUMP Site Kit, a WordPress plugin. ';
-		$prompt .= 'Everything is developed on the hub, bricks.socialbump.com.au, which you reach through its Novamira MCP connector. ';
+		$prompt .= 'Everything is developed on the hub, plugins.socialbump.com.au, which you reach through its Novamira MCP connector. ';
 		$prompt .= 'Before changing anything, read wp-content/plugins/socialbump-site-kit/docs/context.md on the hub. ';
 		$prompt .= 'It explains what the plugin does, how it is built, the conventions it shares with the other two SocialBUMP plugins, and the mistakes already made and fixed. ';
 		$prompt .= 'Keep that file current: when you change how something works or learn something the hard way, write it there in the same session. ';
