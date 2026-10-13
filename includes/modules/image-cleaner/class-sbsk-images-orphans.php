@@ -457,68 +457,170 @@ class SBSK_Images_Orphans {
 			}
 		}
 
-		global $wpdb;
-
 		$names = [];
-		$like  = '%' . $wpdb->esc_like( 'wp-content/uploads' ) . '%';
-
-		$collect = function ( $rows ) use ( &$names ) {
-			foreach ( $rows as $row ) {
-				if ( ! preg_match_all( '/[^\/\\\\"\'\s>]+\.(?:jpe?g|png|gif|webp|avif|svg|bmp|tiff?)/i', (string) $row, $hits ) ) {
-					continue;
-				}
-
-				foreach ( $hits[0] as $hit ) {
-					$names[ strtolower( $hit ) ] = true;
-				}
-			}
-		};
 
 		// Read in pages keyed by the primary key, so a big site is covered in
 		// full. A row cap could miss a real use past it, and a missed use is a
 		// file wrongly listed as an orphan.
-		$after = 0;
-
-		do {
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_content FROM {$wpdb->posts} WHERE ID > %d AND post_content LIKE %s AND post_type <> 'revision' ORDER BY ID ASC LIMIT 2000", $after, $like ) );
-
-			foreach ( $rows as $row ) {
-				$after = (int) $row->ID;
-			}
-
-			$collect( wp_list_pluck( $rows, 'post_content' ) );
-		} while ( count( $rows ) === 2000 );
-
-		$skip = array_merge( [ '_wp_attachment_metadata', '_wp_attached_file', '_wp_attachment_backup_sizes' ], self::bookkeeping_keys() );
-		$hold = implode( ',', array_fill( 0, count( $skip ), '%s' ) );
-
-		$after = 0;
-
-		do {
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT meta_id, meta_value FROM {$wpdb->postmeta} WHERE meta_id > %d AND meta_value LIKE %s AND meta_key NOT IN ( {$hold} ) ORDER BY meta_id ASC LIMIT 5000", array_merge( [ $after, $like ], $skip ) ) );
-
-			foreach ( $rows as $row ) {
-				$after = (int) $row->meta_id;
-			}
-
-			$collect( wp_list_pluck( $rows, 'meta_value' ) );
-		} while ( count( $rows ) === 5000 );
-
-		$after = 0;
-
-		do {
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_id, option_value FROM {$wpdb->options} WHERE option_id > %d AND option_value LIKE %s AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' ORDER BY option_id ASC LIMIT 2000", $after, $like ) );
-
-			foreach ( $rows as $row ) {
-				$after = (int) $row->option_id;
-			}
-
-			$collect( wp_list_pluck( $rows, 'option_value' ) );
-		} while ( count( $rows ) === 2000 );
+		foreach ( self::mention_sources() as $source ) {
+			self::collect_from( $names, $source );
+		}
 
 		set_transient( $key, $names, 10 * MINUTE_IN_SECONDS );
 
 		return $names;
+	}
+
+	/**
+	 * Where a use of an image can be written down, table by table.
+	 *
+	 * Content, excerpts, custom fields, settings, term and user meta, and
+	 * JetEngine's custom content tables, which keep their fields in tables of
+	 * their own. Log and history tables (activity logs, import logs,
+	 * analytics, 404 logs) are left out on purpose: they mention files that
+	 * were once uploaded or requested, and counting those as uses would hold
+	 * every file back for ever. Another plugin's own table can be added with
+	 * the sbsk/orphans/mention_sources filter, as
+	 * [ 'table' => full name, 'key' => numeric primary key, 'columns' => [ ... ],
+	 * 'where' => optional SQL condition ].
+	 */
+	public static function mention_sources() {
+		global $wpdb;
+
+		$skip = array_merge( [ '_wp_attachment_metadata', '_wp_attached_file', '_wp_attachment_backup_sizes' ], self::bookkeeping_keys() );
+		$hold = implode( ',', array_fill( 0, count( $skip ), '%s' ) );
+
+		$sources = [
+			[
+				'table'   => $wpdb->posts,
+				'key'     => 'ID',
+				'columns' => [ 'post_content', 'post_excerpt' ],
+				'where'   => "post_type <> 'revision'",
+				'core'    => true,
+			],
+			[
+				'table'   => $wpdb->postmeta,
+				'key'     => 'meta_id',
+				'columns' => [ 'meta_value' ],
+				'where'   => $wpdb->prepare( "meta_key NOT IN ( {$hold} )", $skip ),
+				'core'    => true,
+			],
+			[
+				'table'   => $wpdb->options,
+				'key'     => 'option_id',
+				'columns' => [ 'option_value' ],
+				'where'   => "option_name NOT LIKE 'sbsk\\_%' AND option_name NOT LIKE '\\_transient%' AND option_name NOT LIKE '\\_site\\_transient%'",
+				'core'    => true,
+			],
+			[
+				'table'   => $wpdb->termmeta,
+				'key'     => 'meta_id',
+				'columns' => [ 'meta_value' ],
+				'where'   => '',
+				'core'    => true,
+			],
+			[
+				'table'   => $wpdb->usermeta,
+				'key'     => 'umeta_id',
+				'columns' => [ 'meta_value' ],
+				'where'   => "meta_key <> 'session_tokens'",
+				'core'    => true,
+			],
+		];
+
+		// JetEngine custom content types: one table each, named jet_cct_<slug>.
+		foreach ( (array) $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $wpdb->prefix . 'jet_cct_' ) . '%' ) ) as $table ) {
+			$columns = [];
+			$key     = '';
+
+			foreach ( (array) $wpdb->get_results( 'SHOW COLUMNS FROM `' . esc_sql( $table ) . '`' ) as $column ) {
+				if ( $column->Key === 'PRI' && $key === '' && preg_match( '/int/i', $column->Type ) ) {
+					$key = $column->Field;
+				}
+
+				if ( preg_match( '/char|text|json/i', $column->Type ) ) {
+					$columns[] = $column->Field;
+				}
+			}
+
+			if ( $key !== '' && $columns ) {
+				$sources[] = [ 'table' => $table, 'key' => $key, 'columns' => $columns, 'where' => '' ];
+			}
+		}
+
+		return (array) apply_filters( 'sbsk/orphans/mention_sources', $sources );
+	}
+
+	/**
+	 * Read every row of one source that names an image file, however written.
+	 *
+	 * Rows used to be picked by the text wp-content/uploads, which missed every
+	 * Elementor page: Elementor stores its data as JSON, where slashes are
+	 * escaped (wp-content\/uploads), so whole pages were skipped and every image
+	 * on them looked unused. Rows are now picked by an image file extension,
+	 * which catches JSON, serialised arrays, relative paths and CDN addresses.
+	 */
+	private static function collect_from( array &$names, array $source ) {
+		global $wpdb;
+
+		$table   = '`' . esc_sql( (string) $source['table'] ) . '`';
+		$key     = '`' . esc_sql( (string) $source['key'] ) . '`';
+		$columns = array_map(
+			function ( $column ) {
+				return '`' . esc_sql( (string) $column ) . '`';
+			},
+			(array) $source['columns']
+		);
+
+		if ( ! $columns ) {
+			return;
+		}
+
+		$match = [];
+
+		foreach ( $columns as $column ) {
+			$match[] = $column . " REGEXP '[.](jpe?g|png|gif|webp|avif|svg|bmp|tiff?)'";
+		}
+
+		$where = '( ' . implode( ' OR ', $match ) . ' )' . ( ! empty( $source['where'] ) ? ' AND ( ' . $source['where'] . ' )' : '' );
+		$after = 0;
+
+		do {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$key} AS sbsk_key, " . implode( ', ', $columns ) . " FROM {$table} WHERE {$key} > %d AND {$where} ORDER BY {$key} ASC LIMIT 2000", $after ), ARRAY_A );
+
+			if ( ! is_array( $rows ) ) {
+				return;
+			}
+
+			foreach ( $rows as $row ) {
+				$after = (int) $row['sbsk_key'];
+				unset( $row['sbsk_key'] );
+
+				foreach ( $row as $value ) {
+					self::names_in( $names, (string) $value );
+				}
+			}
+		} while ( count( $rows ) === 2000 );
+	}
+
+	/**
+	 * Note every image file name in a piece of text.
+	 *
+	 * Escaped slashes are unpicked first, and a URL encoded name is noted as
+	 * well as decoded, so my%20photo.jpg in a page counts as a use of the file
+	 * my photo.jpg.
+	 */
+	private static function names_in( array &$names, $text ) {
+		$text = str_replace( '\\/', '/', $text );
+
+		if ( ! preg_match_all( '/[^\/\\\\"\'\s>]+\.(?:jpe?g|png|gif|webp|avif|svg|bmp|tiff?)/i', $text, $hits ) ) {
+			return;
+		}
+
+		foreach ( $hits[0] as $hit ) {
+			$names[ strtolower( $hit ) ]               = true;
+			$names[ strtolower( rawurldecode( $hit ) ) ] = true;
+		}
 	}
 
 	/** Forget the mentions, so the next check reads the content again. */
@@ -576,8 +678,8 @@ class SBSK_Images_Orphans {
 	}
 
 	public static function references( $path ) {
-		$name    = strtolower( basename( $path ) );
-		$names   = self::mentioned_names();
+		$name  = strtolower( basename( $path ) );
+		$names = self::mentioned_names();
 
 		if ( ! isset( $names[ $name ] ) ) {
 			return [];
@@ -585,10 +687,24 @@ class SBSK_Images_Orphans {
 
 		global $wpdb;
 
-		$like  = '%' . $wpdb->esc_like( basename( $path ) ) . '%';
+		// The name as stored on disk, and URL encoded, the way it appears in a
+		// page when it has spaces or other special characters.
+		$spellings = array_unique( [ basename( $path ), rawurlencode( basename( $path ) ) ] );
+		$matches   = function ( array $columns ) use ( $spellings, $wpdb ) {
+			$any = [];
+
+			foreach ( $columns as $column ) {
+				foreach ( $spellings as $spelling ) {
+					$any[] = $wpdb->prepare( "{$column} LIKE %s", '%' . $wpdb->esc_like( $spelling ) . '%' );
+				}
+			}
+
+			return '( ' . implode( ' OR ', $any ) . ' )';
+		};
+
 		$found = [];
 
-		$posts = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_title, post_type FROM {$wpdb->posts} WHERE post_content LIKE %s AND post_type <> 'revision' LIMIT 3", $like ) );
+		$posts = $wpdb->get_results( "SELECT ID, post_title, post_type FROM {$wpdb->posts} WHERE " . $matches( [ 'post_content', 'post_excerpt' ] ) . " AND post_type <> 'revision' LIMIT 3" );
 
 		foreach ( $posts as $post ) {
 			$found[] = self::label_for( $post );
@@ -597,7 +713,7 @@ class SBSK_Images_Orphans {
 		$skip = array_merge( [ '_wp_attachment_metadata' ], self::bookkeeping_keys() );
 		$hold = implode( ',', array_fill( 0, count( $skip ), '%s' ) );
 
-		$meta = $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, p.post_title, p.post_type FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE m.meta_value LIKE %s AND p.post_type <> 'revision' AND m.meta_key NOT IN ( {$hold} ) LIMIT 3", array_merge( [ $like ], $skip ) ) );
+		$meta = $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, p.post_title, p.post_type FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE " . $matches( [ 'm.meta_value' ] ) . " AND p.post_type <> 'revision' AND m.meta_key NOT IN ( {$hold} ) LIMIT 3", $skip ) );
 
 		foreach ( $meta as $post ) {
 			$label = self::label_for( $post );
@@ -608,21 +724,42 @@ class SBSK_Images_Orphans {
 		}
 
 		if ( ! $found ) {
-			$options = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_value LIKE %s AND option_name NOT LIKE 'sbsk\_%' AND option_name NOT LIKE '\_transient%' AND option_name NOT LIKE '\_site\_transient%' LIMIT 2", $like ) );
+			$options = $wpdb->get_col( "SELECT option_name FROM {$wpdb->options} WHERE " . $matches( [ 'option_value' ] ) . " AND option_name NOT LIKE 'sbsk\\_%' AND option_name NOT LIKE '\\_transient%' AND option_name NOT LIKE '\\_site\\_transient%' LIMIT 2" );
 
 			foreach ( $options as $option ) {
 				$found[] = [ 'label' => sprintf( '%s (setting)', $option ), 'edit' => '' ];
 			}
 		}
 
-		// Term and user meta are not in the index, so they are only looked at when
-		// nothing else matched.
 		if ( ! $found ) {
 			foreach ( [ $wpdb->termmeta => 'term', $wpdb->usermeta => 'user' ] as $table => $what ) {
-				$hit = $wpdb->get_var( $wpdb->prepare( "SELECT meta_key FROM {$table} WHERE meta_value LIKE %s LIMIT 1", $like ) );
+				$hit = $wpdb->get_var( "SELECT meta_key FROM {$table} WHERE " . $matches( [ 'meta_value' ] ) . ' LIMIT 1' );
 
 				if ( $hit ) {
 					$found[] = [ 'label' => sprintf( '%1$s (%2$s)', $hit, $what ), 'edit' => '' ];
+				}
+			}
+		}
+
+		// JetEngine content types and any table added by filter: named by table
+		// and row, since there is no post to link to.
+		if ( ! $found ) {
+			foreach ( self::mention_sources() as $source ) {
+				if ( ! empty( $source['core'] ) ) {
+					continue;
+				}
+
+				$key     = '`' . esc_sql( (string) $source['key'] ) . '`';
+				$columns = array_map(
+					function ( $column ) {
+						return '`' . esc_sql( (string) $column ) . '`';
+					},
+					(array) $source['columns']
+				);
+				$row     = $columns ? $wpdb->get_var( "SELECT {$key} FROM `" . esc_sql( (string) $source['table'] ) . '` WHERE ' . $matches( $columns ) . ( ! empty( $source['where'] ) ? ' AND ( ' . $source['where'] . ' )' : '' ) . ' LIMIT 1' ) : null;
+
+				if ( $row !== null ) {
+					$found[] = [ 'label' => sprintf( '%1$s, row %2$s', preg_replace( '/^' . preg_quote( $wpdb->prefix, '/' ) . '/', '', (string) $source['table'] ), $row ), 'edit' => '' ];
 				}
 			}
 		}

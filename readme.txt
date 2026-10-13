@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.23
+Stable tag: 1.1.24
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.24 =
+* Image Cleaner: the check for whether a file is still used now finds images inside Elementor pages, which it missed before (Elementor stores its pages as JSON, where the uploads address is written with escaped slashes), so those images could be listed as orphans. It also reads post excerpts, term and user meta, and JetEngine custom content tables, and understands URL encoded names. Log and history tables are still left out, so old log entries never hold a file back.
+
 = 1.1.23 =
 * Reports to the hub are more reliable: a check-in now waits for the hub to confirm it (a lost one is tried again later, rather than a day later), and after an update pushed from the hub the site sends its new state back in its answer, so the Installs page is right straight away.
 

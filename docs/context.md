@@ -1573,3 +1573,31 @@ The Install button is generic: any site with a plugin that some module's
 replaces names, and no SocialBUMP Tweaks, gets it once its reporter is 1.2.0
 or later. When the Site Kit module lands with replaces set, Site Kit only sites
 get it with no further change.
+
+## Orphan usage check (October 2026)
+
+Found on Villa Real Estate (Elementor): SBSK_Images_Orphans::mentioned_names()
+picked rows with LIKE '%wp-content/uploads%', but Elementor stores _elementor_data
+as JSON with escaped slashes (wp-content\/uploads), so every Elementor page was
+skipped and its images looked unused. It also only read posts, postmeta and
+options. Now:
+
+- mention_sources() lists where a use can live: post_content and post_excerpt
+  (not revisions), postmeta (minus attachment bookkeeping keys), options (minus
+  sbsk_ and transients), termmeta, usermeta (minus session_tokens), and every
+  JetEngine CCT table ({prefix}jet_cct_*, its text columns). Other tables can be
+  added with the sbsk/orphans/mention_sources filter.
+- collect_from() picks rows by REGEXP on an image extension, not by the uploads
+  path, paged by primary key; names_in() unescapes \/ and records each name
+  both as written and URL decoded.
+- references() matches the name as stored and rawurlencode()d, in content and
+  excerpts, postmeta, options, term and user meta, then any non core source,
+  named as table and row.
+- Log and history tables (MainWP stream, WP All Import, analytics, 404 logs) are
+  deliberately not sources: they mention files once uploaded or requested and
+  would hold everything back.
+
+Verified on Villa: the new index found 1,399 names against 732, saw
+web_dji_0218.jpg in an Elementor page that the old one missed, named the page,
+and agreed with an independent scan of all 146 tables and 243 text files that
+none of the 1,319 orphans was in use. Reading the whole site took 0.6s.
