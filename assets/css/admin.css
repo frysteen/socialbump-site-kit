@@ -2447,3 +2447,37 @@ a.sb-toggle:focus {
 .sbsk-rule:last-child {
 	margin-bottom: 0;
 }
+
+/* Missing images: long addresses wrap rather than push the panel wide. */
+.sbsk-gone__row .sbsk-log__dims a {
+	word-break: break-all;
+}
+
+.sbsk-gone__foot {
+	margin: 12px 0 0;
+}
+
+/* WordPress sizes that can be switched off on the Images page. */
+/* Class on class, to beat WordPress's input[type=checkbox] margin. */
+.sbsk-othersizes__list .sbsk-othersizes__on {
+	flex: 0 0 16px;
+	width: 16px;
+	margin: 0;
+}
+
+.sbsk-othersizes__list li.is-off code,
+.sbsk-othersizes__list li.is-off .sbsk-othersizes__edit,
+.sbsk-othersizes__list li.is-off .sbsk-othersizes__fixed {
+	opacity: 0.5;
+}
+
+/* A missing image has nothing to show, so its box carries a question mark. */
+.sbsk-log__thumb.sbsk-gone__thumb {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #a7aaad;
+	font-size: 22px;
+	font-weight: 600;
+	line-height: 1;
+}

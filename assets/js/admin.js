@@ -143,6 +143,30 @@
 			var lastOrphans = 0;
 			var nonce   = $rebuild.data( 'nonce' );
 
+			/**
+			 * One token per run. The server holds a site wide lock while a long job
+			 * runs and refuses requests from any window without that token,
+			 * because every window shares the held image lists.
+			 */
+			var jobToken = '';
+
+			function newJob() {
+				jobToken = Math.random().toString( 36 ).slice( 2 ) + Date.now().toString( 36 );
+			}
+
+			function releaseJob() {
+				if ( jobToken ) {
+					$.post( ajaxurl, { action: 'sbsk_images_release', nonce: nonce, job: jobToken } );
+				}
+
+				jobToken = '';
+			}
+
+			/** The job another window is running, when the server refused for that reason. */
+			function busyIn( response ) {
+				return response && ! response.success && response.data && response.data.busy ? response.data.busy : null;
+			}
+
 			function buttons( on ) {
 				// Not the progress box's own controls: Cancel has to stay clickable while
 				// a run is going, which is the only time it is on screen.
@@ -165,7 +189,15 @@
 					$( '#sbsk-deep-panel' ).prop( 'hidden', true ).empty();
 				}
 
-				return $.post( ajaxurl, { action: 'sbsk_images_report', nonce: nonce } ).done( function ( response ) {
+				return $.post( ajaxurl, { action: 'sbsk_images_report', nonce: nonce, job: jobToken } ).done( function ( response ) {
+					var busy = busyIn( response );
+
+					if ( busy ) {
+						$panel.prop( 'hidden', true ).empty();
+						watch( busy );
+						return;
+					}
+
 					buttons( true );
 
 					if ( ! response || ! response.success ) {
@@ -247,6 +279,57 @@
 				$close.prop( 'hidden', false );
 			}
 
+			/**
+			 * A job running in another window, or for another person. This window
+			 * only watches: the counts are read from the server every few seconds
+			 * and the buttons stay off until the job has finished. The per image
+			 * log lives in the other window and is not repeated here.
+			 */
+			var watching = null;
+
+			function paintWatch( busy ) {
+				var total = busy.total || 0;
+				var done  = Math.min( busy.done || 0, total );
+				var line  = busy.label + ' in another window, started by ' + busy.user + '. ';
+
+				$bar.css( 'width', ( total ? Math.round( ( done / total ) * 100 ) : 0 ) + '%' );
+				$status.text( line + ( total ? done + ' of ' + total + '. ' + ( busy.current || '' ) : 'Starting...' ) );
+				$timer.text( spell( busy.elapsed ) + ( done > 0 && busy.elapsed > 0 ? ' | ' + ( Math.round( ( busy.elapsed / done ) * 100 ) / 100 ) + 's per ' + busy.unit : '' ) );
+			}
+
+			function pollWatch() {
+				$.post( ajaxurl, { action: 'sbsk_images_status', nonce: nonce } ).done( function ( response ) {
+					var busy = ( response && response.success ) ? response.data.busy : null;
+
+					if ( busy ) {
+						paintWatch( busy );
+						return;
+					}
+
+					window.clearInterval( watching );
+					watching = null;
+					$bar.css( 'width', '100%' );
+					$status.text( 'Finished in the other window.' );
+					$close.prop( 'hidden', false );
+					buttons( true );
+				} );
+			}
+
+			function watch( busy ) {
+				buttons( false );
+				$progress.prop( 'hidden', false );
+				$( '#sbsk-progress-log' ).empty();
+				window.clearInterval( ticking );
+				ticking = null;
+				$cancel.prop( 'hidden', true );
+				$close.prop( 'hidden', true );
+				paintWatch( busy );
+
+				if ( ! watching ) {
+					watching = window.setInterval( pollWatch, 3000 );
+				}
+			}
+
 			$cancel.on( 'click', function () {
 				// The batch in flight finishes; nothing after it is asked for.
 				stopped = true;
@@ -261,9 +344,19 @@
 			}
 
 			function batch( offset, total, force, mode, sizes ) {
-				$.post( ajaxurl, { action: 'sbsk_images_batch', nonce: nonce, offset: offset, force: force ? 1 : 0, mode: mode, sizes: sizes || [], batch: ( retried || force ) ? 1 : 5 } ).done( function ( response ) {
+				$.post( ajaxurl, { action: 'sbsk_images_batch', nonce: nonce, job: jobToken, offset: offset, force: force ? 1 : 0, mode: mode, sizes: sizes || [], batch: ( retried || force ) ? 1 : 5 } ).done( function ( response ) {
 					if ( ! response || ! response.success ) {
 						stopClock();
+
+						var busy = busyIn( response );
+
+						if ( busy ) {
+							jobToken = '';
+							watch( busy );
+							return;
+						}
+
+						releaseJob();
 						$status.text( 'Something went wrong. Try again.' );
 						buttons( true );
 						return;
@@ -329,6 +422,7 @@
 						}
 
 						scan( true );
+						releaseJob();
 						return;
 					}
 
@@ -352,6 +446,7 @@
 					}
 
 					stopClock();
+					releaseJob();
 					$status.text( 'The server did not answer. Anything already built has been kept, so you can start again from here.' );
 					buttons( true );
 				} );
@@ -359,6 +454,7 @@
 
 			function start( mode, force, sizes ) {
 				totals = { built: 0, removed: 0, files: 0 };
+				newJob();
 
 				buttons( false );
 				$progress.prop( 'hidden', false );
@@ -367,11 +463,21 @@
 				$( '#sbsk-progress-log' ).empty();
 				startClock();
 
-				$.post( ajaxurl, { action: 'sbsk_images_count', nonce: nonce } ).done( function ( response ) {
+				$.post( ajaxurl, { action: 'sbsk_images_count', nonce: nonce, job: jobToken, mode: mode, force: force ? 1 : 0 } ).done( function ( response ) {
+					var busy = busyIn( response );
+
+					if ( busy ) {
+						stopClock();
+						jobToken = '';
+						watch( busy );
+						return;
+					}
+
 					var total = ( response && response.success ) ? response.data.total : 0;
 
 					if ( ! total ) {
 						stopClock();
+						releaseJob();
 						$status.text( 'No images found.' );
 						buttons( true );
 						return;
@@ -440,7 +546,15 @@
 				$button.prop( 'disabled', true );
 				$deep.prop( 'hidden', false ).html( '<p class="sbsk-deep__working">Looking through the uploads folder...</p>' );
 
-				$.post( ajaxurl, { action: 'sbsk_images_deep', nonce: nonce } ).done( function ( response ) {
+				$.post( ajaxurl, { action: 'sbsk_images_deep', nonce: nonce, job: jobToken } ).done( function ( response ) {
+					var busy = busyIn( response );
+
+					if ( busy ) {
+						$deep.prop( 'hidden', true ).empty();
+						watch( busy );
+						return;
+					}
+
 					$button.prop( 'disabled', false );
 
 					if ( response && response.success ) {
@@ -521,8 +635,18 @@
 				 * their reasons and are shown once it finishes.
 				 */
 				function batch( offset ) {
-					$.post( ajaxurl, { action: 'sbsk_images_deep_remove', nonce: nonce, dims: dims, offset: offset } ).done( function ( response ) {
+					$.post( ajaxurl, { action: 'sbsk_images_deep_remove', nonce: nonce, job: jobToken, dims: dims, offset: offset } ).done( function ( response ) {
+						var busy = busyIn( response );
+
+						if ( busy ) {
+							jobToken = '';
+							$deep.prop( 'hidden', true ).empty();
+							watch( busy );
+							return;
+						}
+
 						if ( ! response || ! response.success ) {
+							releaseJob();
 							$deep.html( '<p class="sbsk-deep__working">Something went wrong. ' + removed + ' files had already been removed.</p>' );
 
 							return;
@@ -564,11 +688,14 @@
 						$deep.html( note + data.html );
 						deepButtons();
 						scan( true );
+						releaseJob();
 					} ).fail( function () {
+						releaseJob();
 						$deep.html( '<p class="sbsk-deep__working">The server did not answer. ' + removed + ' files had already been removed.</p>' );
 					} );
 				}
 
+				newJob();
 				batch( 0 );
 			} );
 
@@ -593,7 +720,12 @@
 
 				$row.find( '.sbsk-fix' ).prop( 'disabled', true );
 
-				$.post( ajaxurl, { action: 'sbsk_images_fix', nonce: nonce, id: $button.data( 'id' ), sizes: size ? [ size ] : [] } ).done( function ( response ) {
+				$.post( ajaxurl, { action: 'sbsk_images_fix', nonce: nonce, job: jobToken, id: $button.data( 'id' ), sizes: size ? [ size ] : [] } ).done( function ( response ) {
+					if ( busyIn( response ) ) {
+						watch( busyIn( response ) );
+						return;
+					}
+
 					if ( ! response || ! response.success ) {
 						$row.find( '.sbsk-fix' ).prop( 'disabled', false );
 
@@ -637,6 +769,32 @@
 				} );
 			} );
 
+			// An orphaned original goes back in the library where it is. The rescan
+			// then drops it, and its thumbnails, from the orphan list.
+			$panel.on( 'click', '.sbsk-report__add', function () {
+				var $button = $( this );
+
+				$button.prop( 'disabled', true ).text( 'Adding...' );
+
+				$.post( ajaxurl, { action: 'sbsk_images_orphan_add', nonce: nonce, job: jobToken, file: $button.data( 'file' ) } ).done( function ( response ) {
+					if ( busyIn( response ) ) {
+						$button.prop( 'disabled', false ).text( 'Add to library' );
+						watch( busyIn( response ) );
+						return;
+					}
+
+					if ( response && response.success ) {
+						scan( true );
+						return;
+					}
+
+					$button.prop( 'disabled', false ).text( 'Add to library' );
+					window.alert( ( response && response.data && response.data.message ) || 'That file could not be added.' );
+				} ).fail( function () {
+					$button.prop( 'disabled', false ).text( 'Add to library' );
+				} );
+			} );
+
 			$panel.on( 'click', '.sbsk-report__delete', function () {
 				var $button = $( this );
 				var file    = $button.data( 'file' );
@@ -647,7 +805,13 @@
 
 				$button.prop( 'disabled', true ).text( 'Deleting...' );
 
-				$.post( ajaxurl, { action: 'sbsk_images_orphan_one', nonce: nonce, file: file } ).done( function ( response ) {
+				$.post( ajaxurl, { action: 'sbsk_images_orphan_one', nonce: nonce, job: jobToken, file: file } ).done( function ( response ) {
+					if ( busyIn( response ) ) {
+						$button.prop( 'disabled', false ).text( 'Delete' );
+						watch( busyIn( response ) );
+						return;
+					}
+
 					if ( response && response.success ) {
 						$button.closest( 'tr' ).remove();
 						scan( true );
@@ -656,6 +820,78 @@
 
 					$button.prop( 'disabled', false ).text( 'Delete' );
 				} );
+			} );
+
+			/**
+			 * Missing images: library entries with no file on disk. Taken out of the
+			 * library a batch at a time in the progress box, so a long list never
+			 * sits in one request. The server checks each one again before it goes.
+			 */
+			function deleteGone( ids, offset, deleted ) {
+				var slice = ids.slice( offset, offset + 20 );
+
+				$.post( ajaxurl, { action: 'sbsk_images_gone_delete', nonce: nonce, job: jobToken, ids: slice, offset: offset, total: ids.length } ).done( function ( response ) {
+					if ( ! response || ! response.success ) {
+						stopClock();
+
+						if ( busyIn( response ) ) {
+							jobToken = '';
+							watch( busyIn( response ) );
+							return;
+						}
+
+						releaseJob();
+						$status.text( 'Something went wrong. ' + deleted + ' had already been deleted.' );
+						buttons( true );
+						return;
+					}
+
+					deleted += response.data.deleted;
+
+					var done = Math.min( offset + slice.length, ids.length );
+
+					seenNow = done;
+					paintTimer();
+
+					$bar.css( 'width', Math.round( ( done / ids.length ) * 100 ) + '%' );
+					$status.text( done + ' of ' + ids.length + ' checked.' );
+
+					if ( response.data.done || done >= ids.length || stopped ) {
+						finished( ( stopped && done < ids.length ? 'Stopped. ' : 'Finished. ' ) + deleted + ' missing image' + ( deleted === 1 ? '' : 's' ) + ' deleted.' );
+						scan( true );
+						releaseJob();
+						return;
+					}
+
+					deleteGone( ids, done, deleted );
+				} ).fail( function () {
+					stopClock();
+					releaseJob();
+					$status.text( 'The server did not answer. ' + deleted + ' had already been deleted.' );
+					buttons( true );
+				} );
+			}
+
+			$panel.on( 'click', '#sbsk-gone-delete', function () {
+				var ids = $( this ).data( 'ids' ) || [];
+
+				if ( ! ids.length ) {
+					return;
+				}
+
+				if ( ! window.confirm( 'Delete ' + ids.length + ' missing image' + ( ids.length === 1 ? '' : 's' ) + ' from the Media Library? Pages using them lose them. This cannot be undone.' ) ) {
+					return;
+				}
+
+				buttons( false );
+				$progress.prop( 'hidden', false );
+				$( '#sbsk-progress-log' ).empty();
+				$bar.css( 'width', '0%' );
+				$status.text( 'Deleting...' );
+				startClock();
+				newJob();
+
+				deleteGone( ids, 0, 0 );
 			} );
 
 			$( '#sbsk-progress-close' ).on( 'click', function () {
@@ -686,9 +922,17 @@
 			} );
 
 			function clearOrphans( offset, cleared, freed ) {
-				$.post( ajaxurl, { action: 'sbsk_images_orphans', nonce: nonce, offset: offset } ).done( function ( response ) {
+				$.post( ajaxurl, { action: 'sbsk_images_orphans', nonce: nonce, job: jobToken, offset: offset } ).done( function ( response ) {
 					if ( ! response || ! response.success ) {
 						stopClock();
+
+						if ( busyIn( response ) ) {
+							jobToken = '';
+							watch( busyIn( response ) );
+							return;
+						}
+
+						releaseJob();
 						$status.text( 'Something went wrong. Nothing else was changed.' );
 						buttons( true );
 						return;
@@ -712,12 +956,14 @@
 						$bar.css( 'width', data.done ? '100%' : pct + '%' );
 						finished( ( data.done ? 'Finished. ' : 'Stopped. ' ) + cleared + ' files removed, ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed.' );
 						scan( true );
+						releaseJob();
 						return;
 					}
 
 					clearOrphans( data.offset, cleared, freed );
 				} ).fail( function () {
 					stopClock();
+					releaseJob();
 					$status.text( 'The server did not answer. Nothing else was changed, and what was already removed has gone.' );
 					buttons( true );
 				} );
@@ -734,8 +980,16 @@
 				$bar.css( 'width', '0%' );
 				$status.text( 'Clearing...' );
 				startClock();
+				newJob();
 
 				clearOrphans( 0, 0, 0 );
+			} );
+
+			// Another window, or another person, may already be running a job.
+			$.post( ajaxurl, { action: 'sbsk_images_status', nonce: nonce } ).done( function ( response ) {
+				if ( response && response.success && response.data.busy ) {
+					watch( response.data.busy );
+				}
 			} );
 		}
 

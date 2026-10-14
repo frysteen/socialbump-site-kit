@@ -21,7 +21,7 @@ return [
 			[ 'label' => __( 'Clean up the image file name on upload', 'sb-site-kit' ), 'on' => (bool) SBSK_Images::setting( 'clean_titles', 1 ) ],
 			[ 'label' => __( 'Add ALT text on upload', 'sb-site-kit' ), 'on' => (bool) SBSK_Images::setting( 'auto_alt', 1 ) ],
 			[ 'label' => __( 'Gutenberg image zoom', 'sb-site-kit' ), 'on' => (bool) SBSK_Images::setting( 'gallery_zoom', 0 ) ],
-			[ 'label' => __( 'Media Library thumbnail size', 'sb-site-kit' ), 'on' => (bool) SBSK_Images::setting( 'media_grid', 1 ) ],
+			[ 'label' => __( 'Media Browser Enhancements', 'sb-site-kit' ), 'on' => (bool) SBSK_Images::setting( 'media_grid', 1 ) ],
 			[ 'label' => __( 'Better media search', 'sb-site-kit' ), 'on' => (bool) SBSK_Images::setting( 'media_search', 1 ) ],
 		];
 	},

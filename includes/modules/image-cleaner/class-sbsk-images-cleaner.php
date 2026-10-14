@@ -203,8 +203,6 @@ class SBSK_Images_Cleaner {
 	 * large library cannot stall the request.
 	 */
 	public static function render_page() {
-		echo '<div class="sbsk-cleaner">';
-
 		if ( isset( $_GET['sbsk_adopted'] ) ) {
 			$added   = (int) $_GET['sbsk_adopted'];
 			$refused = (int) ( $_GET['sbsk_refused'] ?? 0 );
@@ -222,6 +220,11 @@ class SBSK_Images_Cleaner {
 		if ( isset( $_GET['sbsk_unadopted'] ) ) {
 			echo '<div class="notice notice-success inline"><p>' . esc_html__( 'That size will no longer be cleared.', 'sb-site-kit' ) . '</p></div>';
 		}
+
+		// Notices go above the grid. Inside it a notice takes a grid cell and pushes
+		// the Sizes and Rebuild panels out of place.
+		echo '<div class="sbsk-cleaner">';
+
 		self::render_sizes();
 
 		echo '<section class="sbsk-section sbsk-rebuild" id="sbsk-rebuild" data-nonce="' . esc_attr( wp_create_nonce( 'sbsk_images' ) ) . '">';

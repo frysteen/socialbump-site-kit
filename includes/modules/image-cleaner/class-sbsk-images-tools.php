@@ -27,6 +27,10 @@ class SBSK_Images_Tools {
 		add_action( 'wp_ajax_sbsk_images_orphans', [ __CLASS__, 'ajax_orphans' ] );
 		add_action( 'wp_ajax_sbsk_images_orphan_one', [ __CLASS__, 'ajax_orphan_one' ] );
 		add_action( 'wp_ajax_sbsk_images_keep', [ __CLASS__, 'ajax_keep' ] );
+		add_action( 'wp_ajax_sbsk_images_status', [ __CLASS__, 'ajax_status' ] );
+		add_action( 'wp_ajax_sbsk_images_gone_delete', [ __CLASS__, 'ajax_gone_delete' ] );
+		add_action( 'wp_ajax_sbsk_images_orphan_add', [ __CLASS__, 'ajax_orphan_add' ] );
+		add_action( 'wp_ajax_sbsk_images_release', [ __CLASS__, 'ajax_release' ] );
 		add_filter( 'attachment_fields_to_edit', [ __CLASS__, 'attachment_field' ], 20, 2 );
 		add_action( 'add_meta_boxes_attachment', [ __CLASS__, 'meta_box' ] );
 	}
@@ -35,6 +39,137 @@ class SBSK_Images_Tools {
 		if ( ! current_user_can( 'upload_files' ) || ! check_ajax_referer( 'sbsk_images', 'nonce', false ) ) {
 			wp_send_json_error( [ 'message' => __( 'Not allowed.', 'sb-site-kit' ) ], 403 );
 		}
+	}
+
+	/**
+	 * The long job running now, site wide: a build, a clear or a delete.
+	 *
+	 * Every window shares the held image lists (and a count clears them), so a
+	 * Scan or a run started in a second window reset the list under the first
+	 * and it skipped images. The window running a job sends a token with every
+	 * request; anything without it is refused while the job is going, and other
+	 * windows show its progress instead.
+	 */
+	const JOB = 'sbsk_images_job';
+
+	/** Seconds with no batch before a job counts as abandoned, a closed window say. */
+	const JOB_LAPSE = 150;
+
+	private static function job_token() {
+		return isset( $_POST['job'] ) ? substr( sanitize_key( wp_unslash( $_POST['job'] ) ), 0, 40 ) : '';
+	}
+
+	public static function job() {
+		$job = get_transient( self::JOB );
+
+		return is_array( $job ) && ! empty( $job['token'] ) ? $job : null;
+	}
+
+	/** Refuse the request when another window's job holds the lock. */
+	private static function job_gate() {
+		$job = self::job();
+
+		if ( $job && $job['token'] !== self::job_token() ) {
+			wp_send_json_error( [ 'busy' => self::job_public( $job ) ] );
+		}
+	}
+
+	/** What a run request is doing, from what the page sent. */
+	private static function job_kind() {
+		if ( ! empty( $_POST['force'] ) ) {
+			return 'force';
+		}
+
+		return isset( $_POST['mode'] ) && sanitize_key( wp_unslash( $_POST['mode'] ) ) === 'clean' ? 'clean' : 'build';
+	}
+
+	/**
+	 * Claim the lock for this window's job, or keep it alive. $done and $total
+	 * of null leave the last counts as they were, for the call at the start of
+	 * a batch, before there is anything new to report.
+	 */
+	private static function job_beat( $kind, $done = null, $total = null, $current = null ) {
+		$token = self::job_token();
+
+		if ( $token === '' ) {
+			return;
+		}
+
+		$job = self::job();
+
+		if ( ! $job || $job['token'] !== $token ) {
+			$job = [
+				'token'   => $token,
+				'kind'    => $kind,
+				'user'    => wp_get_current_user()->display_name,
+				'started' => time(),
+				'done'    => 0,
+				'total'   => 0,
+				'current' => '',
+			];
+		}
+
+		if ( $done !== null ) {
+			$job['done'] = (int) $done;
+		}
+
+		if ( $total !== null ) {
+			$job['total'] = (int) $total;
+		}
+
+		if ( $current !== null ) {
+			$job['current'] = (string) $current;
+		}
+
+		set_transient( self::JOB, $job, self::JOB_LAPSE );
+	}
+
+	/** Let go of the lock, only if this window holds it. */
+	private static function job_end() {
+		$job = self::job();
+
+		if ( $job && $job['token'] === self::job_token() ) {
+			delete_transient( self::JOB );
+		}
+	}
+
+	/** The part of a job another window is shown. The token stays here. */
+	public static function job_public( array $job ) {
+		$labels = [
+			'build'   => __( 'Building thumbnails', 'sb-site-kit' ),
+			'force'   => __( 'Rebuilding all thumbnails', 'sb-site-kit' ),
+			'clean'   => __( 'Removing old sizes', 'sb-site-kit' ),
+			'orphans' => __( 'Deleting orphan images', 'sb-site-kit' ),
+			'deep'    => __( 'Deleting leftover thumbnails', 'sb-site-kit' ),
+			'gone'    => __( 'Deleting missing images', 'sb-site-kit' ),
+		];
+		$kind   = isset( $labels[ $job['kind'] ?? '' ] ) ? $job['kind'] : 'build';
+
+		return [
+			'label'   => $labels[ $kind ],
+			'unit'    => in_array( $kind, [ 'orphans', 'deep' ], true ) ? 'file' : 'image',
+			'user'    => (string) ( $job['user'] ?? '' ),
+			'done'    => (int) ( $job['done'] ?? 0 ),
+			'total'   => (int) ( $job['total'] ?? 0 ),
+			'current' => (string) ( $job['current'] ?? '' ),
+			'elapsed' => max( 0, time() - (int) ( $job['started'] ?? time() ) ),
+		];
+	}
+
+	/** A job running in another window, for the page to watch, or null. */
+	public static function ajax_status() {
+		self::guard();
+
+		$job = self::job();
+
+		wp_send_json_success( [ 'busy' => $job && $job['token'] !== self::job_token() ? self::job_public( $job ) : null ] );
+	}
+
+	/** A run that was cancelled or failed lets go of the lock straight away. */
+	public static function ajax_release() {
+		self::guard();
+		self::job_end();
+		wp_send_json_success();
 	}
 
 	/**
@@ -75,6 +210,12 @@ class SBSK_Images_Tools {
 			$held = get_transient( $key );
 
 			if ( is_array( $held ) ) {
+				// Each batch pushes the expiry on. A fixed ten minutes let a long run
+				// lose its list part way through: the list was worked out again,
+				// shorter by the images already done, while the run kept its offset,
+				// so as many images were skipped as had been done.
+				set_transient( $key, $held, 10 * MINUTE_IN_SECONDS );
+
 				return $held;
 			}
 		}
@@ -165,12 +306,28 @@ class SBSK_Images_Tools {
 		$sizes       = 0;
 		$stale_sizes = 0;
 		$stale_files = 0;
+		$stale_bytes = 0;
 		$stale_names = [];
 		$rows        = [];
 		$foreign     = [];
+		$carried     = [];
+		$gone        = [];
 
 		foreach ( $ids as $id ) {
 			$meta   = (array) wp_get_attachment_metadata( $id );
+
+			foreach ( array_keys( (array) ( $meta['sizes'] ?? [] ) ) as $carried_name ) {
+				$carried[ $carried_name ] = true;
+			}
+
+			// No original on disk: nothing can be built or cleared for it. It is
+			// listed under Missing images instead of as sizes to build.
+			if ( SBSK_Images_Rebuild::original_missing( $id ) ) {
+				$gone[] = (int) $id;
+
+				continue;
+			}
+
 			$absent = SBSK_Images_Rebuild::missing_all( $id, $meta, $only );
 			$names  = SBSK_Images_Rebuild::stale( $id, $meta );
 
@@ -189,7 +346,9 @@ class SBSK_Images_Tools {
 			if ( $names ) {
 				$stale++;
 				$stale_sizes += count( $names );
-				$stale_files += SBSK_Images_Rebuild::stale_files( $id, $meta );
+				$usage        = SBSK_Images_Rebuild::stale_usage( $id, $meta );
+				$stale_files += $usage['files'];
+				$stale_bytes += $usage['bytes'];
 
 				foreach ( $names as $name ) {
 					$stale_names[ $name ] = true;
@@ -218,6 +377,9 @@ class SBSK_Images_Tools {
 			}
 		}
 
+		// A size chosen for clearing that no image carries any more is done with.
+		SBSK_Images_Rebuild::forget_adopted_unused( array_keys( $carried ) );
+
 		uasort(
 			$foreign,
 			function ( $a, $b ) {
@@ -236,6 +398,8 @@ class SBSK_Images_Tools {
 			'sizes'       => $sizes,
 			'stale_sizes' => $stale_sizes,
 			'stale_files' => $stale_files,
+			'stale_bytes' => $stale_bytes,
+			'gone'        => $gone,
 			'stale_names' => array_keys( $stale_names ),
 			'foreign'     => $foreign,
 			'rows'        => $rows,
@@ -244,6 +408,8 @@ class SBSK_Images_Tools {
 
 	public static function ajax_count() {
 		self::guard();
+		self::job_gate();
+		self::job_beat( self::job_kind(), 0, 0, '' );
 		self::forget_run();
 
 		// A scan answers for the site as it is now, so the mention index is rebuilt
@@ -256,6 +422,8 @@ class SBSK_Images_Tools {
 
 	public static function ajax_batch() {
 		self::guard();
+		self::job_gate();
+		self::job_beat( self::job_kind() );
 
 		// Building several sizes from a large original can outlast the default
 		// thirty seconds, and a request that dies looks like the server ignoring us.
@@ -317,6 +485,9 @@ class SBSK_Images_Tools {
 
 		if ( count( $ids ) < $size ) {
 			self::forget_run();
+			self::job_end();
+		} else {
+			self::job_beat( self::job_kind(), $offset + count( $ids ), count( $run ), $last ? basename( (string) get_attached_file( $last ) ) : '' );
 		}
 
 		wp_send_json_success(
@@ -336,6 +507,101 @@ class SBSK_Images_Tools {
 		);
 	}
 
+
+	/** How many missing images one delete request takes. */
+	const GONE_BATCH = 20;
+
+	/**
+	 * Library images with no file on disk: the address WordPress expects each
+	 * file at, and the page it was uploaded to. Hidden until the Missing images
+	 * figure is clicked. Delete takes them out of the library, and each one is
+	 * checked again on the server before it goes.
+	 */
+	public static function gone_list( array $ids ) {
+		if ( ! $ids ) {
+			return '';
+		}
+
+		$html = '<div class="sbsk-missing" id="sbsk-gone" hidden>';
+		$html .= '<ul class="sbsk-progress__log sbsk-missing__log">';
+
+		foreach ( array_slice( $ids, 0, self::LIST_CAP ) as $id ) {
+			$url    = (string) wp_get_attachment_url( $id );
+			$name   = basename( (string) get_post_meta( $id, '_wp_attached_file', true ) );
+			$parent = (int) wp_get_post_parent_id( $id );
+
+			$html .= '<li class="sbsk-log__row sbsk-gone__row"><span class="sbsk-log__thumb is-empty sbsk-gone__thumb" aria-hidden="true">?</span><div class="sbsk-log__detail">';
+			$html .= '<strong>' . esc_html( $name !== '' ? $name : '#' . $id ) . '</strong>';
+			$html .= ' <a class="sbsk-report__id" href="' . esc_url( (string) get_edit_post_link( $id ) ) . '">#' . (int) $id . '</a>';
+
+			if ( $url !== '' ) {
+				$html .= '<span class="sbsk-log__dims"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener">' . esc_html( $url ) . '</a></span>';
+			}
+
+			if ( $parent ) {
+				$html .= '<span class="sbsk-log__dims">' . esc_html__( 'Uploaded to', 'sb-site-kit' ) . ' <a href="' . esc_url( (string) get_edit_post_link( $parent ) ) . '">' . esc_html( html_entity_decode( get_the_title( $parent ), ENT_QUOTES, 'UTF-8' ) ) . '</a></span>';
+			}
+
+			$html .= '</div></li>';
+		}
+
+		$html .= '</ul>';
+
+		if ( count( $ids ) > self::LIST_CAP ) {
+			$html .= '<p class="sbsk-missing__note">' . esc_html( sprintf( __( 'Showing the first %1$s of %2$s images. Delete covers them all.', 'sb-site-kit' ), number_format_i18n( self::LIST_CAP ), number_format_i18n( count( $ids ) ) ) ) . '</p>';
+		}
+
+		$html .= '<p class="sbsk-gone__foot"><button type="button" class="button sbsk-button--danger" id="sbsk-gone-delete" data-ids="' . esc_attr( (string) wp_json_encode( array_map( 'intval', $ids ) ) ) . '">' . esc_html__( 'Delete missing images', 'sb-site-kit' ) . '</button></p>';
+
+		return $html . '</div>';
+	}
+
+	/**
+	 * Take missing images out of the library, a batch at a time. The page sends
+	 * the ids; each is checked here again, and only an image attachment whose
+	 * file really is gone, and which this user may delete, is deleted.
+	 */
+	public static function ajax_gone_delete() {
+		self::guard();
+		self::job_gate();
+
+		$ids    = isset( $_POST['ids'] ) ? array_values( array_unique( array_filter( array_map( 'intval', (array) wp_unslash( $_POST['ids'] ) ) ) ) ) : [];
+		$ids    = array_slice( $ids, 0, self::GONE_BATCH );
+		$offset = isset( $_POST['offset'] ) ? max( 0, (int) $_POST['offset'] ) : 0;
+		$total  = isset( $_POST['total'] ) ? max( 0, (int) $_POST['total'] ) : 0;
+
+		self::job_beat( 'gone', $offset, $total );
+
+		$deleted = 0;
+		$kept    = 0;
+		$last    = '';
+
+		foreach ( $ids as $id ) {
+			if ( get_post_type( $id ) !== 'attachment' || ! wp_attachment_is_image( $id ) || ! SBSK_Images_Rebuild::original_missing( $id ) || ! current_user_can( 'delete_post', $id ) ) {
+				$kept++;
+
+				continue;
+			}
+
+			$last = basename( (string) get_post_meta( $id, '_wp_attached_file', true ) );
+
+			if ( wp_delete_attachment( $id, true ) ) {
+				$deleted++;
+			} else {
+				$kept++;
+			}
+		}
+
+		$done = $offset + count( $ids ) >= $total;
+
+		if ( $done ) {
+			self::job_end();
+		} else {
+			self::job_beat( 'gone', $offset + count( $ids ), $total, $last );
+		}
+
+		wp_send_json_success( [ 'deleted' => $deleted, 'kept' => $kept, 'done' => $done ] );
+	}
 
 	/**
 	 * The images missing a size, one row each, with the sizes under them.
@@ -531,6 +797,7 @@ class SBSK_Images_Tools {
 	 */
 	public static function ajax_deep() {
 		self::guard();
+		self::job_gate();
 
 		if ( function_exists( 'set_time_limit' ) ) {
 			@set_time_limit( 180 );
@@ -563,6 +830,8 @@ class SBSK_Images_Tools {
 	 */
 	public static function ajax_deep_remove() {
 		self::guard();
+		self::job_gate();
+		self::job_beat( 'deep' );
 
 		if ( function_exists( 'set_time_limit' ) ) {
 			@set_time_limit( 120 );
@@ -590,11 +859,18 @@ class SBSK_Images_Tools {
 		$batch = array_slice( $paths, $offset, self::DEEP_BATCH );
 
 		if ( ! $batch ) {
+			self::job_end();
 			wp_send_json_success( [ 'removed' => 0, 'skipped' => [], 'bytes' => 0, 'offset' => $offset, 'total' => $total, 'done' => true, 'html' => self::deep_list( $found ) ] );
 		}
 
 		$result = SBSK_Images_Orphans::remove_unaccounted( $batch, $found['files'] );
 		$done   = count( $batch ) < self::DEEP_BATCH;
+
+		if ( $done ) {
+			self::job_end();
+		} else {
+			self::job_beat( 'deep', $offset + count( $batch ), $total, basename( (string) end( $batch ) ) );
+		}
 
 		wp_send_json_success(
 			[
@@ -712,6 +988,7 @@ class SBSK_Images_Tools {
 
 	public static function ajax_fix() {
 		self::guard();
+		self::job_gate();
 
 		$id = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
 
@@ -882,6 +1159,7 @@ class SBSK_Images_Tools {
 
 	public static function ajax_report() {
 		self::guard();
+		self::job_gate();
 
 		// The heaviest request here: every attachment is checked and the uploads
 		// folder is walked. On a large library that outlasts the usual thirty
@@ -894,6 +1172,18 @@ class SBSK_Images_Tools {
 
 		$summary     = self::summary();
 		$orphans     = SBSK_Images_Orphans::find();
+
+		// Originals first, so one worth adding back to the library is never
+		// below the cut off under a pile of thumbnails.
+		usort(
+			$orphans['files'],
+			function ( $a, $b ) {
+				$one = self::is_original( $a['path'] ) ? 0 : 1;
+				$two = self::is_original( $b['path'] ) ? 0 : 1;
+
+				return $one !== $two ? $one <=> $two : strcmp( $a['path'], $b['path'] );
+			}
+		);
 		$missing     = $summary['sizes'];
 		$stale       = $summary['stale_sizes'];
 		$stale_files = $summary['stale_files'];
@@ -903,7 +1193,11 @@ class SBSK_Images_Tools {
 		$stats = [];
 		$stats[] = [ 'label' => __( 'Images with thumbnails', 'sb-site-kit' ), 'value' => number_format_i18n( $summary['total'] ), 'tone' => 'plain', 'note' => $summary['skipped'] ? sprintf( _n( '%s SVG or similar skipped', '%s SVGs and similar skipped', $summary['skipped'], 'sb-site-kit' ), number_format_i18n( $summary['skipped'] ) ) : '' ];
 		$stats[] = [ 'label' => __( 'Sizes to build', 'sb-site-kit' ), 'value' => number_format_i18n( $missing ), 'tone' => $missing ? 'warn' : 'good', 'note' => sprintf( _n( 'across %s image', 'across %s images', $summary['missing'], 'sb-site-kit' ), number_format_i18n( $summary['missing'] ) ), 'opens' => $missing ? 'sbsk-missing' : '' ];
-		$stats[] = [ 'label' => __( 'Old thumbnails to clear', 'sb-site-kit' ), 'value' => number_format_i18n( $stale_files ), 'tone' => $stale_files ? 'warn' : 'good', 'note' => sprintf( __( '%1$s across %2$s', 'sb-site-kit' ), sprintf( _n( '%s removed size', '%s removed sizes', count( $stale_names ), 'sb-site-kit' ), number_format_i18n( count( $stale_names ) ) ), sprintf( _n( '%s image', '%s images', $summary['stale'], 'sb-site-kit' ), number_format_i18n( $summary['stale'] ) ) ) ];
+		$stats[] = [ 'label' => __( 'Old thumbnails to clear', 'sb-site-kit' ), 'value' => number_format_i18n( $stale_files ), 'tone' => $stale_files ? 'warn' : 'good', 'note' => sprintf( __( '%1$s across %2$s', 'sb-site-kit' ), sprintf( _n( '%s removed size', '%s removed sizes', count( $stale_names ), 'sb-site-kit' ), number_format_i18n( count( $stale_names ) ) ), sprintf( _n( '%s image', '%s images', $summary['stale'], 'sb-site-kit' ), number_format_i18n( $summary['stale'] ) ) ) . ( $stale_files ? ', ' . size_format( $summary['stale_bytes'], 1 ) : '' ) ];
+		if ( $summary['gone'] ) {
+			$stats[] = [ 'label' => __( 'Missing images', 'sb-site-kit' ), 'value' => number_format_i18n( count( $summary['gone'] ) ), 'tone' => 'warn', 'note' => __( 'In the library, no file on disk', 'sb-site-kit' ), 'opens' => 'sbsk-gone' ];
+		}
+
 		$deletable = 0;
 		$held      = 0;
 
@@ -958,6 +1252,7 @@ class SBSK_Images_Tools {
 
 		$html .= '</div>';
 		$html .= self::missing_list( $summary );
+		$html .= self::gone_list( $summary['gone'] );
 		$html .= self::foreign_html( $summary['foreign'] );
 
 		if ( $orphans['files'] ) {
@@ -997,6 +1292,10 @@ class SBSK_Images_Tools {
 				$rows .= '<span class="sbsk-report__name"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener">' . esc_html( $relative ) . '</a>' . $pill . $state . '</span></td>';
 				$rows .= '<td class="sbsk-report__size">' . esc_html( size_format( $file['bytes'] ) ) . '</td>';
 				$rows .= '<td class="sbsk-report__action">';
+
+				if ( self::is_original( $file['path'] ) ) {
+					$rows .= '<button type="button" class="button sbsk-report__add" data-file="' . esc_attr( $relative ) . '">' . esc_html__( 'Add to library', 'sb-site-kit' ) . '</button>';
+				}
 				$rows .= '<button type="button" class="button sbsk-report__keep" data-file="' . esc_attr( $relative ) . '" data-keep="' . ( $is_kept ? '0' : '1' ) . '">' . esc_html( $is_kept ? __( 'Stop keeping', 'sb-site-kit' ) : __( 'Keep', 'sb-site-kit' ) ) . '</button>';
 				$rows .= '<button type="button" class="button sbsk-report__delete" data-file="' . esc_attr( $relative ) . '">' . esc_html__( 'Delete', 'sb-site-kit' ) . '</button>';
 				$rows .= '</td></tr>';
@@ -1040,6 +1339,8 @@ class SBSK_Images_Tools {
 	 */
 	public static function ajax_orphans() {
 		self::guard();
+		self::job_gate();
+		self::job_beat( 'orphans' );
 
 		require_once __DIR__ . '/class-sbsk-images-orphans.php';
 
@@ -1065,6 +1366,7 @@ class SBSK_Images_Tools {
 
 		if ( ! $batch ) {
 			delete_transient( $key );
+			self::job_end();
 			wp_send_json_success( [ 'removed' => 0, 'bytes' => 0, 'offset' => $offset, 'total' => $total, 'done' => true ] );
 		}
 
@@ -1075,6 +1377,9 @@ class SBSK_Images_Tools {
 
 		if ( $done ) {
 			delete_transient( $key );
+			self::job_end();
+		} else {
+			self::job_beat( 'orphans', $offset + count( $batch ), $total, basename( (string) end( $batch ) ) );
 		}
 
 		wp_send_json_success(
@@ -1090,8 +1395,83 @@ class SBSK_Images_Tools {
 		);
 	}
 	/** Delete a single orphaned file, named relative to the uploads folder. */
+	/**
+	 * Whether an orphan looks like an original rather than a thumbnail: no
+	 * -WxH on the end of its name, and not an optimiser's .webp or .avif copy
+	 * written beside another image. Only these can be added to the library.
+	 */
+	private static function is_original( $path ) {
+		$name = strtolower( basename( (string) $path ) );
+
+		if ( preg_match( '/\.(jpe?g|jpe|png|gif|webp|avif)\.(webp|avif)$/', $name ) ) {
+			return false;
+		}
+
+		return ! preg_match( '/-\d+x\d+\.[a-z0-9]+$/', $name );
+	}
+
+	/**
+	 * Put an orphaned original back in the Media Library, where it is, without
+	 * moving or renaming it. Only a file the orphan scan lists right now and
+	 * that looks like an original is taken. Its sizes are made the way an
+	 * upload makes them, so thumbnails of it still on disk belong to it again.
+	 */
+	public static function ajax_orphan_add() {
+		self::guard();
+		self::job_gate();
+
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 120 );
+		}
+
+		require_once __DIR__ . '/class-sbsk-images-orphans.php';
+
+		$relative = isset( $_POST['file'] ) ? (string) wp_unslash( $_POST['file'] ) : '';
+		$relative = ltrim( str_replace( [ '..', chr( 0 ) ], '', $relative ), '/' );
+		$path     = trailingslashit( wp_upload_dir()['basedir'] ) . $relative;
+		$listed   = $relative !== '' && in_array( $path, wp_list_pluck( SBSK_Images_Orphans::find()['files'], 'path' ), true );
+
+		if ( ! $listed || ! self::is_original( $path ) || ! SBSK_Images_Orphans::looks_like_image( $path ) ) {
+			wp_send_json_error( [ 'message' => __( 'Only an original image in the orphan list can be added.', 'sb-site-kit' ) ], 400 );
+		}
+
+		$type = wp_check_filetype( basename( $path ) );
+
+		if ( empty( $type['type'] ) || strpos( $type['type'], 'image/' ) !== 0 ) {
+			wp_send_json_error( [ 'message' => __( 'That file is not an image WordPress accepts.', 'sb-site-kit' ) ], 400 );
+		}
+
+		$title = method_exists( 'SBSK_Images', 'clean_title' ) ? SBSK_Images::clean_title( basename( $path ) ) : pathinfo( $path, PATHINFO_FILENAME );
+		$id    = wp_insert_attachment(
+			[
+				'post_mime_type' => $type['type'],
+				'post_title'     => $title,
+				'post_content'   => '',
+				'post_status'    => 'inherit',
+			],
+			$path,
+			0,
+			true
+		);
+
+		if ( is_wp_error( $id ) || ! $id ) {
+			wp_send_json_error( [ 'message' => is_wp_error( $id ) ? $id->get_error_message() : __( 'The library entry could not be made.', 'sb-site-kit' ) ], 500 );
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+
+		$meta = wp_generate_attachment_metadata( $id, $path );
+
+		if ( $meta ) {
+			wp_update_attachment_metadata( $id, $meta );
+		}
+
+		wp_send_json_success( [ 'id' => (int) $id, 'name' => basename( $path ) ] );
+	}
+
 	public static function ajax_orphan_one() {
 		self::guard();
+		self::job_gate();
 
 		require_once __DIR__ . '/class-sbsk-images-orphans.php';
 

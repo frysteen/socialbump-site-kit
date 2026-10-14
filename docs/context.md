@@ -376,9 +376,12 @@ run logs every image, because there the skipped ones are the interesting part.
   file_has_other_owner() says nothing else uses it: another size of the same
   attachment with the same dimensions (medium at 480 and image-480 share one
   file), the original itself, or any other attachment whose metadata names
-  the file. That last check is one LIKE on postmeta per stale file.
+  the file. That last check reads file_owners(), built once per request
+  (see Clearing old thumbnails faster below); it used to be one LIKE on
+  postmeta per stale file.
 - A run holds its id list in a transient for ten minutes (sbsk_images_run_ per
-  user and per mode; sbsk_orphans_run_ for the orphan list) instead of every
+  user and per mode, pushed on another ten minutes by every batch that reads
+  it; sbsk_orphans_run_ for the orphan list) instead of every
   batch fetching the whole library again. One list per tool: a build, a clean
   and a forced rebuild each keep their own, so switching tools mid run cannot
   hand one the other's ids. ids() also warms the attachment meta cache in
@@ -802,7 +805,8 @@ per job. The ones with more than one file:
 
 | Module | Files | Why more than one |
 | --- | --- | --- |
-| images | class-sbsk-images.php, -rebuild.php, -tools.php, -orphans.php | the sizes, the batch rebuild, the media tools, and sizes the kit did not create |
+| images | class-sbsk-images.php, -rebuild.php, -media-grid.php, -media-search.php, -zoom.php | the sizes and the Images page; the size engine (building, clearing, owned, adopted and switched off sizes); Media Browser Enhancements with assets/js/media-grid.js and assets/css/media-grid.css; Better media search; Gutenberg image zoom with the gallery-zoom assets |
+| image-cleaner | class-sbsk-images-cleaner.php, -tools.php, -orphans.php | the Image Cleaner page; its AJAX handlers, the one job at a time lock and missing images; files on disk the library does not know about |
 | admin-colour-scheme | class plus assets | registers the SocialBUMP scheme, which the other plugins read for their accent |
 | excerpt-counter | class plus assets | has to cope with TinyMCE arriving late |
 | woo-analytics-csv | class plus assets | the buttons are injected into a React screen, so the script polls for it |
@@ -847,14 +851,15 @@ are the three rules worth reading before you touch it.
 | --- | --- |
 | sb_tweaks_site_kit_features | which modules are on |
 | sb_tweaks_site_kit_groups | which groups are on |
-| sb_tweaks_site_kit_settings | each module settings |
+| sb_tweaks_site_kit_settings | each module settings. Images also keeps wp_off here, the WordPress sizes switched off |
 | sb_tweaks_site_kit_owned_image_sizes | image sizes the kit created |
 | sb_tweaks_site_kit_kept_orphans | files in uploads it was told to leave alone, kept as paths relative to the uploads folder |
 | sb_tweaks_site_kit_image_split | that the Image Cleaner split migration has run, and which scheme |
 | sb_tweaks_site_kit_cleaner_sizes (user meta) | the sizes each user has ticked on the Image Cleaner page |
 | sb_tweaks_site_kit_adopted_image_sizes | removed sizes from other sources that someone chose to clear on the Image Cleaner page |
-| sb_tweaks_site_kit_media_grid (user meta) | each user's Media Library grid size and fit |
-| sbsk_images_run_<user>_<mode>, sbsk_orphans_run_<user> (transients) | the id or path list held for a run, ten minutes, one per tool so a build and a clean never share a list |
+| sb_tweaks_site_kit_media_grid (user meta) | each user's thumbnail size and fit, used in the Media Library grid and the media pop-up |
+| sbsk_images_run_<user>_<mode>, sbsk_orphans_run_<user> (transients) | the id or path list held for a run, one per tool so a build and a clean never share a list. Ten minutes; the images list is renewed each time a batch reads it, so a long run keeps it |
+| sbsk_images_job (transient) | the Image Cleaner job running now: token, kind, who started it, when, and its counts. Renewed by each batch and gone 150 seconds after the last, so a closed window frees it |
 | socialbump_cards (user meta) | each user's card order and collapsed cards, per page key |
 | sbsk_github_token | encrypted, hub only, and deleted on any site that is not the hub |
 | sbsk_pending_changes | notes for the next release, hub only, deleted elsewhere |
@@ -1626,7 +1631,11 @@ Now:
   which calls adopt(): names currently registered or owned are refused, the
   rest go in ADOPTED_OPTION (sb_tweaks_site_kit_adopted_image_sizes), separate from owned.
   Other sizes chosen for clearing lists them, each with Stop clearing
-  (admin_post_sbsk_unadopt_sizes, unadopt()).
+  (admin_post_sbsk_unadopt_sizes, unadopt()). The scan also takes a chosen
+  size off the list by itself once no image carries it any more
+  (forget_adopted_unused(), fed by summary()), so after a clear and a rescan
+  it is gone without pressing Stop clearing. If something writes it back
+  later, it shows under Leftover sizes again, unticked.
 - stale() intersects with owned + adopted, against what is registered at that
   moment, and clean() asks stale() per image during removal, so a size
   registered again is never cleared. file_has_other_owner() still guards each
@@ -1639,6 +1648,10 @@ removed the entries, deleted the size's own file and its .webp, kept the shared
 thumbnail; Site Kit's own (owned) sizes behaved as before.
 
 ## Media Library thumbnail size (October 2026)
+
+The switch is now called Media Browser Enhancements (same media_grid key), since it
+also covers the media pop-up and the HappyFiles folder dropdown. See the two
+sections on the pop-up further down.
 
 A switch under Image extras on the Images page, media_grid in the images
 settings, on until someone turns it off. SBSK_Images_Media_Grid in
@@ -1737,3 +1750,272 @@ sbsk/media_search/applies and sbsk/media_search/file_variants.
 Not changed: HappyFiles limits a search to the folder that is open. That is
 HappyFiles' own behaviour, and a search from inside a folder only looks in
 that folder.
+
+## Clearing old thumbnails faster (October 2026)
+
+Found on villarealestate.com.au clearing twelve removed sizes from 3,547
+images: 1.39 seconds an image, nearly an hour and a half for the run.
+
+- The cost was file_has_other_owner(): one LIKE over every attachment's
+  metadata (4,997 rows, 14.5 MB) for each file about to be deleted, 150 ms a
+  time on Villa. SBSK_Images_Rebuild::file_owners() now reads all the metadata
+  once per request, paged by meta_id, and records which attachments name each
+  file: first (name to the first attachment seen) and shared (names more than
+  one attachment uses, with every owner). The check is then an array lookup.
+- It matches what the query matched: a serialised string value that is
+  exactly the file name, folder included where the entry has one (see
+  Size files in other folders below). Only values ending in a file extension
+  are kept, which leaves out mime types. Built once per request from what is
+  stored then, so a name cleared later in the same request can only keep a
+  file, never delete one in use.
+- Checked against the old query: every size file on the hub (59, 12 of them
+  shared) and 379 cases on Villa (all 150 shared image names tried, plus every
+  old size on 40 random images), no differences. Villa: the old query took
+  35.8 s for those, the new check 4.4 ms after a 0.2 s build.
+- The same run showed a second fault. ids() held the run's list for a fixed
+  ten minutes. Once that ran out, the next batch worked the list out again,
+  shorter by the images already done, while the browser kept its offset, so
+  as many images were skipped as had been done (Villa's list went 3,547, then
+  3,112, then 2,652 while the offset carried on). A rescan picked them up, but
+  the finished line was wrong. Every batch that reads the held list now pushes
+  its expiry on another ten minutes.
+- The adopt and un-adopt notices were printed inside .sbsk-cleaner, which is a
+  two column grid, so a notice took the left cell and pushed Sizes and Rebuild
+  Thumbnails out of place. render_page() prints them before opening the grid.
+  Anything printed on that page goes above the grid or inside a panel.
+
+## Size files in other folders (October 2026)
+
+Found on villarealestate.com.au: elementor_custom_1280x500 showed under
+Leftover sizes as 3 images, 0 files. Elementor makes a custom size on demand
+when an image widget is set to Custom, writes it to uploads/elementor/thumbs/,
+and records it in the image's metadata as elementor/thumbs/<name>, a path
+from the uploads folder, not a bare name beside the original. Every path
+here was built as the original's folder plus the entry, so the files were
+never found: the scan counted none, and a clear would have dropped the entries
+and left the files with nothing naming them.
+
+- SBSK_Images_Rebuild::size_path( $folder, $file ) is now the one way to turn
+  an entry into a path: a bare name sits beside the original, a name with a
+  folder is read from the uploads folder, and anything with a .. segment or a
+  null byte gives an empty path, which every caller skips. size_files(),
+  present(), process(), clean() and stale_files() all use it.
+- file_owners() keeps names with a folder in them, so a shared Elementor file
+  is still protected.
+- Not changed: the orphan and deep scans only walk the uploads root and the
+  dated folders, so uploads/elementor/ is never scanned by them.
+- Tested on the hub with planted files: an elementor/thumbs size and its .webp
+  were counted (2 files) and deleted, one named by a second image was kept,
+  both entries went, the image's other sizes were untouched, and everything
+  planted was removed. Villa's 3 files are now found (about 494 KB).
+- On Villa the size came from the Single - Property Layout template (5899):
+  the Post Featured Image and Image Carousel widgets still hold a 1280 x 500
+  custom dimension but are set to image-1200, so nothing makes it any more.
+
+## One Image Cleaner job at a time (October 2026)
+
+Found on Villa: a build was running in one window, and Image Cleaner opened in
+a second window looked idle. Worse than it looked: every window shares the
+held run lists (sbsk_images_run_<user>_<mode>), and ajax_count() clears them
+at the start of every run, so a Scan or a run started in the second window
+would have reset the list under the first and it would have skipped images.
+
+- A site wide lock, the transient sbsk_images_job (JOB in the tools class):
+  token, kind (build, force, clean, orphans, deep), who started it, when, done,
+  total and the current file. It lapses after JOB_LAPSE (150 seconds) with no
+  batch, so a closed window cannot leave it stuck.
+- The page makes a token per run (newJob() in admin.js) and sends it as job
+  with every request. job_gate() refuses count, batch, report, deep,
+  deep_remove, orphans, orphan_one and fix from anything without that token
+  while a job holds the lock, answering with busy: the job's public details,
+  never the token. ajax_count() claims the lock; each batch handler refreshes
+  it at the start (job_beat() with no counts keeps the last ones) and records
+  the counts after; the last batch ends it (job_end(), only for the holder).
+  When a run is cancelled or fails, the page lets go straight away through
+  sbsk_images_release. The page calls scan( true ) before releaseJob(), so
+  the quiet rescan still carries the token if the lock is still there.
+- Other windows, and other people: on load the page asks sbsk_images_status.
+  While a job runs, watch() shows the progress box with the job's label, who
+  started it, done of total, the current file and the time (per image or per
+  file), polls every 3 seconds, keeps the run buttons off, and shows Finished
+  in the other window when the lock is gone. A refused request does the same.
+  The per image log is not repeated there; it only exists in the running
+  window.
+- Tested on the hub through the real AJAX handlers with a temporary login
+  session (destroyed afterwards): a second window's scan, count and batch were
+  refused with the job's details; status showed the job to other windows but
+  not to the running one; the token never appeared in a reply; a release with
+  the wrong token kept the lock and the right one freed it; a whole build from
+  count to last batch left the lock free. The build was real and made the
+  hub's few missing thumbnails. Reading the transient in the same request as
+  those HTTP calls returned stale values from that request's cache, so check
+  through the status call or a fresh request.
+
+## Missing images (October 2026)
+
+Found on Villa: 7 library images had no file on disk at all, not the original
+and not one size, all uploaded within 25 minutes on 13 April 2023 (a migration
+that lost them). They showed as 52 sizes to build across 7 images, with
+Rebuild links that could never work. All 7 were still used on published
+portfolio pages (featured image, gallery, property_slider_images). Sam chose
+to delete them rather than find the files.
+
+- SBSK_Images_Rebuild::original_missing( $id ): the attached file is not on
+  disk. missing() and missing_all() return nothing for such an image, so it
+  never counts as sizes to build and Build passes over it.
+- summary() collects them as gone (after noting their size names for the
+  adopted list tidy) and skips the rest of its checks for them. The report
+  shows a Missing images card, only when there are any, opening the
+  sbsk-gone list from gone_list(): each image's name, its id linking to the
+  attachment, the address WordPress expects the file at, and the page it was
+  uploaded to. Capped at LIST_CAP rows; the delete covers them all. Each
+  row keeps the thumbnail box, with a grey question mark in it
+  (.sbsk-gone__thumb), since there is no image to show.
+- Delete missing images (sbsk_images_gone_delete, GONE_BATCH 20 a request)
+  runs in the progress box under the job lock as kind gone. The page sends
+  the ids, and the server deletes only an image attachment whose file really
+  is gone and that the user may delete (wp_delete_attachment, force), so a
+  forged or stale id cannot take out a real image. WordPress itself drops
+  _thumbnail_id rows pointing at a deleted attachment; ids kept in gallery
+  fields (JetEngine and the like) are left as they are and point at nothing.
+- Usage is deliberately not shown: finding ids inside gallery meta took about
+  a second an image on Villa (a REGEXP over postmeta), too slow for a list.
+- Tested on the hub with a planted entry with no file and a real image (489):
+  the planted one showed only under Missing images, the card and list carried
+  its address, and a delete asked for both removed the planted one and kept
+  489 and its file. The planted entry is gone.
+
+## Switching off WordPress sizes (October 2026)
+
+Sam unticked 1536x1536 and 2048x2048 in the Image Cleaner's Sizes list and
+expected them gone. That list is per user and only chooses what the tools
+work on, so WordPress kept making them and their files stayed (Villa: 4,053
+files, 2.15 GB, and 1,057 files, 1.23 GB). Remove old sizes never clears a
+registered size, so nothing could touch them.
+
+- The Additional thumbnail sizes list on the Images page has a tick beside
+  each of SBSK_Images_Rebuild::OFFABLE: medium_large, large, 1536x1536 and
+  2048x2048. Thumbnail and medium have no tick and always stay, because the
+  media library and the editor show them. Unticked names are saved as
+  wp_off in the images settings; the form carries sbsk_wp_list so a save
+  without the list keeps what was there.
+- SBSK_Images::drop_off_sizes() filters intermediate_image_sizes, which is
+  what get_intermediate_image_sizes(), wp_get_registered_image_subsizes() and
+  so uploads and all_wanted() read. A switched off size is no longer made,
+  and Site Kit no longer counts it as registered. size_names() also drops it
+  from the editor's choices (only large is offered there by WordPress).
+- other_sizes() adds switched off sizes back from $_wp_additional_image_sizes
+  or the _size_w options, because WordPress no longer lists them, so they
+  stay on the page, unticked and dimmed (li.is-off), ready to switch on.
+- stale() treats wp_off names like owned and adopted ones, and foreign()
+  leaves them out, so their files go straight to Old thumbnails to clear on
+  the next scan, without adopting. Turning one back on makes it registered
+  again, so it is never cleared and Build makes it where it is missing.
+- srcset reads the sizes in each image's metadata, not the registered list,
+  so a switched off size keeps appearing in srcset until it is cleared.
+- Tested on the hub by submitting the page's own form as an admin with two
+  sizes unticked: wp_off saved as exactly those two, every other setting the
+  same. Then in a fresh request: neither in WordPress's list or what an
+  upload makes, stale for an image carrying 1536x1536 and not foreign, the
+  scan listing 5 hub images under Old thumbnails to clear (not cleared), both
+  still on the page unticked; with large off it also left the editor's
+  choices. The hub's settings were put back exactly afterwards.
+
+## Space on the Old thumbnails to clear figure (October 2026)
+
+The card's note ends with the space its files take, for example "2 removed
+sizes across 4,053 images, 3.4 GB". SBSK_Images_Rebuild::stale_usage()
+returns files and bytes (stale_files() now wraps it), and summary() adds up
+stale_bytes in the pass it already makes. The scan already checks each file
+exists, so the size is one more look at the same file. Like the file count,
+it includes a file shared with a size that is kept, which the clear leaves in
+place, so it is the most the clear can free. Orphaned images already showed
+its total. Checked on Villa: 3,620,226,845 bytes for 7,596 files, the same as
+an independent count from the disk; the whole scan pass took 2.1 seconds.
+
+## Add an orphan back to the library (October 2026)
+
+On Villa, deleting the 7 missing images turned up orphaned originals and their
+thumbnails, most likely because those records named slightly different files
+from the ones on disk (not confirmed: they were deleted before anyone looked).
+
+- The orphan list is sorted originals first (is_original(): no -WxH on the
+  end of the name, and not an optimiser's copy such as photo.jpg.webp), so an
+  original is never hidden under the 25 row cut off.
+- An original's row has Add to library (sbsk_images_orphan_add, one at a
+  time, under the job lock). The server only takes a file the orphan scan
+  lists at that moment (find() is run again), that is_original() and
+  looks_like_image() accept, and that WordPress takes as an image type. It
+  makes the attachment where the file is, without moving or renaming it,
+  titled through SBSK_Images::clean_title(), then wp_generate_attachment_
+  metadata() makes its sizes as an upload would, so thumbnails of it on disk
+  belong to it again. The page rescans and the row, and its thumbnails, drop
+  off the list. A big original goes through WordPress's -scaled step.
+- Tested on the hub with a planted original, one of its thumbnails and a
+  .webp copy: only the original had the button and came first, the other two
+  were refused, the original became a library image with its sizes, and the
+  rescan dropped all three. Everything planted was removed.
+
+## Thumbnail size and fit in the media pop-up (October 2026)
+
+The Media Library thumbnail size and fit choices now also apply in the media
+pop-up, wherever it opens (post screens, page builders, gallery fields such
+as JetEngine's), with the same two dropdowns in its toolbar. The choice is
+the same per user meta, so the pop-up follows the Media Library and the
+other way round.
+
+- SBSK_Images_Media_Grid::enqueue_modal() on wp_enqueue_media loads the
+  script with media-views as its dependency, skipping upload.php, which keeps
+  loading through enqueue() with media-grid. assets() holds the shared part
+  and loads only once.
+- media-grid.js: wanted() is the Media Library grid or any frame with a modal
+  (the Media Library's own frame has none). The bigger file is asked for on
+  grid tiles but not on the small selection bar thumbnails
+  (media.view.Attachment.Selection). Picker ids carry the view's cid, since a
+  page can build several pop-ups.
+- media-grid.css: every rule also covers .media-modal .attachments. In the
+  pop-up WordPress lays its filters on a two column grid in
+  .media-toolbar-secondary (labels above, selects below), so the picker takes
+  grid-area 2 / 3 / 3 / 4, level with their selects. That placement was set
+  from WordPress's CSS, not seen in a browser before release.
+- Checked through real page loads on the hub: the script, styles and config
+  load on a post edit screen and on Media Library grid, not in list view. The
+  dashboard loads them too, because something there calls wp_enqueue_media().
+- The filename caption over pictures in some pop-ups comes from neither
+  WordPress's templates nor the image records (both checked on Villa) and
+  shows on the hub as well; HappyFiles is on both. Left alone at Sam's call.
+
+## HappyFiles folder dropdown in the pop-up from a post list (October 2026)
+
+On a post list screen (edit.php, such as Admin Columns Pro inline edit of a
+featured image on Portfolios) HappyFiles leaves its folder panel out of the
+media pop-up and stops filtering it. The pop-up there now has a Filter by
+folder dropdown: All folders, Uncategorised, then every HappyFiles folder
+nested by parent. Anywhere HappyFiles shows its own panel there is no
+dropdown, so the two never double up.
+
+- SBSK_Images_Media_Grid::folders() sends the folder list (id, name, depth)
+  only when $pagenow is edit.php and happyfiles() is true (HAPPYFILES_VERSION
+  defined and the happyfiles_category taxonomy registered, checked when used
+  since HappyFiles may load after Site Kit); anywhere else it is false, an
+  empty string in SBSKMediaGrid.folders. folder_query() does nothing without
+  HappyFiles either.
+- The toggle (setting key media_grid, unchanged) is now called Media Browser
+  Enhancements, with a description covering the grid, the pop-up and the
+  folder dropdown. Same label in module.php's dashboard list.
+- media-grid.js: FolderFilter sets the sbsk_folder prop on the library's
+  props, added in a modal frame only when there are folders (priority -70,
+  before the size picker).
+- folder_query() on ajax_query_attachments_args (priority 20) reads
+  $_REQUEST['query']['sbsk_folder'], because WordPress drops query keys it
+  does not know. -1 is images in no folder (NOT EXISTS); a folder id shows
+  that folder's own images, not its children, the way HappyFiles does. 0, an
+  unknown id or anything below -1 is ignored.
+- media-grid.css: the dropdown takes grid column 3 (label above, select
+  below) and the size picker moves to column 4 when it is there. Set from
+  WordPress's CSS, not seen in a browser before release.
+- Checked through real page loads and query-attachments calls on the hub: the
+  list is sent on edit.php for posts and pages, not on a post edit screen or
+  the Media Library; each folder returned exactly the images the database
+  holds for it. On Villa the Portfolios list sends 7 folders, and
+  Uncategorised returns 4,755 of 4,928 images.

@@ -1,4 +1,4 @@
-/* Site Kit: Media Library grid thumbnail size and fit. */
+/* Site Kit: Media Library grid thumbnail size and fit, on Media > Library and in the media pop-up. */
 
 .sbsk-grid-picker {
 	display: inline-block;
@@ -12,13 +12,19 @@
  */
 body.sbsk-grid-size-large #wp-media-grid .attachment-preview.type-image .thumbnail .centered,
 body.sbsk-grid-size-xlarge #wp-media-grid .attachment-preview.type-image .thumbnail .centered,
-body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered {
+body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered,
+body.sbsk-grid-size-large .media-modal .attachments .attachment-preview.type-image .thumbnail .centered,
+body.sbsk-grid-size-xlarge .media-modal .attachments .attachment-preview.type-image .thumbnail .centered,
+body.sbsk-grid-fit-contain .media-modal .attachments .attachment-preview.type-image .thumbnail .centered {
 	transform: none;
 }
 
 body.sbsk-grid-size-large #wp-media-grid .attachment-preview.type-image .thumbnail .centered img,
 body.sbsk-grid-size-xlarge #wp-media-grid .attachment-preview.type-image .thumbnail .centered img,
-body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered img {
+body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered img,
+body.sbsk-grid-size-large .media-modal .attachments .attachment-preview.type-image .thumbnail .centered img,
+body.sbsk-grid-size-xlarge .media-modal .attachments .attachment-preview.type-image .thumbnail .centered img,
+body.sbsk-grid-fit-contain .media-modal .attachments .attachment-preview.type-image .thumbnail .centered img {
 	position: absolute;
 	top: 0;
 	left: 0;
@@ -31,18 +37,48 @@ body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbn
 	object-position: center;
 }
 
-body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered img {
+body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered img,
+body.sbsk-grid-fit-contain .media-modal .attachments .attachment-preview.type-image .thumbnail .centered img {
 	object-fit: contain;
 }
 
 /* Whole image: a little breathing room and a light backdrop. */
-body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered {
+body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered,
+body.sbsk-grid-fit-contain .media-modal .attachments .attachment-preview.type-image .thumbnail .centered {
 	top: 6px;
 	left: 6px;
 	width: calc( 100% - 12px );
 	height: calc( 100% - 12px );
 }
 
-body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image {
+body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image,
+body.sbsk-grid-fit-contain .media-modal .attachments .attachment-preview.type-image {
 	background: #f6f7f7;
+}
+
+/*
+ * In the pop-up WordPress lays its two filters out on a grid, labels above and
+ * selects below. The picker takes a third column, level with their selects.
+ */
+.media-modal .media-toolbar-secondary > .sbsk-grid-picker {
+	grid-area: 2 / 3 / 3 / 4;
+	display: flex;
+	align-items: end;
+	gap: 12px;
+}
+
+/*
+ * The folder dropdown, only in pop-ups opened from a post list screen: label
+ * above and select below like WordPress's date filter, in the third column.
+ * The size picker moves along one column when it is there.
+ */
+.media-modal .media-toolbar-secondary > .sbsk-folder-filter {
+	grid-area: 1 / 3 / 3 / 4;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+}
+
+.media-modal .media-toolbar-secondary > .sbsk-folder-filter ~ .sbsk-grid-picker {
+	grid-area: 2 / 4 / 3 / 5;
 }

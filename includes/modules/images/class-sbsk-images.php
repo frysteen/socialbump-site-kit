@@ -20,6 +20,7 @@ class SBSK_Images {
 	public static function boot() {
 		add_action( 'after_setup_theme', [ __CLASS__, 'register_sizes' ] );
 		add_filter( 'image_size_names_choose', [ __CLASS__, 'size_names' ] );
+		add_filter( 'intermediate_image_sizes', [ __CLASS__, 'drop_off_sizes' ] );
 		add_action( 'add_attachment', [ __CLASS__, 'on_upload' ] );
 		add_action( 'admin_post_sbsk_save_images', [ __CLASS__, 'save' ] );
 		require_once __DIR__ . '/class-sbsk-images-rebuild.php';
@@ -65,7 +66,22 @@ class SBSK_Images {
 		}
 	}
 
+	/**
+	 * Take the WordPress sizes switched off on this page out of WordPress's own
+	 * list. That list is what decides which sizes an upload makes, so they stop
+	 * being made, and Site Kit no longer counts them as registered.
+	 */
+	public static function drop_off_sizes( $sizes ) {
+		$off = SBSK_Images_Rebuild::wp_off();
+
+		return $off ? array_values( array_diff( (array) $sizes, $off ) ) : $sizes;
+	}
+
 	public static function size_names( $names ) {
+		foreach ( SBSK_Images_Rebuild::wp_off() as $off ) {
+			unset( $names[ $off ] );
+		}
+
 		if ( ! self::setting( 'sizes_on', 1 ) ) {
 			return $names;
 		}
@@ -240,6 +256,15 @@ class SBSK_Images {
 			}
 		}
 
+		// WordPress sizes switched off: any offered and left unticked. A save that
+		// did not carry the list keeps what was there.
+		if ( isset( $_POST['sbsk_wp_list'] ) ) {
+			$wp_on  = isset( $_POST['sbsk_wp_on'] ) ? array_map( 'sanitize_key', (array) wp_unslash( $_POST['sbsk_wp_on'] ) ) : [];
+			$wp_off = array_values( array_diff( SBSK_Images_Rebuild::OFFABLE, $wp_on ) );
+		} else {
+			$wp_off = SBSK_Images_Rebuild::wp_off();
+		}
+
 		$settings           = (array) get_option( SBSK_Modules::SETTINGS_OPTION, [] );
 		$settings['images'] = [
 			'sizes_on'     => empty( $_POST['sbsk_sizes_on'] ) ? 0 : 1,
@@ -249,6 +274,7 @@ class SBSK_Images {
 			'gallery_zoom' => empty( $_POST['sbsk_gallery_zoom'] ) ? 0 : 1,
 			'media_grid'   => empty( $_POST['sbsk_media_grid'] ) ? 0 : 1,
 			'media_search' => empty( $_POST['sbsk_media_search'] ) ? 0 : 1,
+			'wp_off'       => $wp_off,
 		];
 
 		update_option( SBSK_Modules::SETTINGS_OPTION, $settings );
@@ -321,7 +347,7 @@ class SBSK_Images {
 		// Image extras
 		echo '<section class="sbsk-section"><div class="sbsk-section__head"><h2>' . esc_html__( 'Image extras', 'sb-site-kit' ) . '</h2></div><div class="sbsk-grid">';
 		echo self::checkbox( 'sbsk_gallery_zoom', (bool) self::setting( 'gallery_zoom', 0 ), __( 'Gutenberg image zoom', 'sb-site-kit' ), __( 'The gallery and image blocks get an Enable zoom option and a popup size. The size on the page stays the block\'s own Resolution setting.', 'sb-site-kit' ) );
-		echo self::checkbox( 'sbsk_media_grid', (bool) self::setting( 'media_grid', 1 ), __( 'Media Library thumbnail size', 'sb-site-kit' ), __( 'Adds two choices to the Media Library grid: thumbnail size (Standard, Large or X-Large), and Cropped squares or Whole image. Each person\'s choice is remembered.', 'sb-site-kit' ) );
+		echo self::checkbox( 'sbsk_media_grid', (bool) self::setting( 'media_grid', 1 ), __( 'Media Browser Enhancements', 'sb-site-kit' ), __( 'Thumbnail size (Standard, Large or X-Large) and Cropped squares or Whole image, in the Media Library grid and in the media pop-up wherever it opens. Each person\'s choice is remembered, and the pop-up follows the Media Library. With HappyFiles active, the pop-up opened from a post list (such as Admin Columns inline edit) also gets a folder dropdown, since HappyFiles leaves its folder panel out there.', 'sb-site-kit' ) );
 		echo self::checkbox( 'sbsk_media_search', (bool) self::setting( 'media_search', 1 ), __( 'Better media search', 'sb-site-kit' ), __( 'Media searches also look at alt text and the file name, including the name it was uploaded with. A pasted image URL finds its image.', 'sb-site-kit' ) );
 		echo '</div></section>';
 
@@ -363,6 +389,18 @@ class SBSK_Images {
 				'width' => (int) get_option( $name . '_size_w' ),
 				'crop'  => (bool) get_option( $name . '_crop' ),
 			];
+		}
+
+		// A switched off size is no longer in WordPress's list, so it is added back
+		// here to stay on the page, unticked, ready to switch on again.
+		foreach ( SBSK_Images_Rebuild::wp_off() as $name ) {
+			if ( isset( $sizes[ $name ] ) ) {
+				continue;
+			}
+
+			$sizes[ $name ] = isset( $_wp_additional_image_sizes[ $name ] )
+				? [ 'width' => (int) $_wp_additional_image_sizes[ $name ]['width'], 'crop' => ! empty( $_wp_additional_image_sizes[ $name ]['crop'] ) ]
+				: [ 'width' => (int) get_option( $name . '_size_w' ), 'crop' => (bool) get_option( $name . '_crop' ) ];
 		}
 
 		return $sizes;
@@ -437,10 +475,23 @@ class SBSK_Images {
 		echo '<div class="sbsk-othersizes">';
 		echo '<h3>' . esc_html__( 'Additional thumbnail sizes', 'sb-site-kit' ) . '</h3>';
 		echo '<p class="sbsk-report__note">' . esc_html__( 'Made on every upload by WordPress, the theme or another plugin. The ones with a box can be changed here. A rebuild covers them all.', 'sb-site-kit' ) . '</p>';
+		echo '<input type="hidden" name="sbsk_wp_list" value="1">';
 		echo '<ul class="sbsk-othersizes__list">';
 
 		foreach ( $sizes as $name => $size ) {
-			echo '<li>';
+			$offable = in_array( $name, SBSK_Images_Rebuild::OFFABLE, true );
+			$is_off  = in_array( $name, SBSK_Images_Rebuild::wp_off(), true );
+
+			echo '<li' . ( $is_off ? ' class="is-off"' : '' ) . '>';
+
+			// WordPress's larger sizes can be switched off. Thumbnail and medium
+			// stay on, because the media library and the editor show them.
+			if ( $offable ) {
+				echo '<input type="checkbox" class="sbsk-othersizes__on" name="sbsk_wp_on[]" value="' . esc_attr( $name ) . '" title="' . esc_attr__( 'Make this size', 'sb-site-kit' ) . '"' . checked( ! $is_off, true, false ) . '>';
+			} else {
+				echo '<span class="sbsk-othersizes__on"></span>';
+			}
+
 			echo '<code>' . esc_html( $name ) . '</code>';
 
 			if ( isset( $editable[ $name ] ) ) {

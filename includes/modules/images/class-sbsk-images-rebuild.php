@@ -27,6 +27,24 @@ class SBSK_Images_Rebuild {
 	 */
 	const ADOPTED_OPTION = 'sb_tweaks_site_kit_adopted_image_sizes';
 
+	/**
+	 * WordPress sizes that can be switched off on the Images page. Thumbnail and
+	 * medium always stay: the media library and the editor show them.
+	 */
+	const OFFABLE = [ 'medium_large', 'large', '1536x1536', '2048x2048' ];
+
+	/**
+	 * WordPress sizes switched off on the Images page (images setting wp_off).
+	 * They are taken out of WordPress's size list, so nothing makes them, and
+	 * their files count as old sizes to clear without being chosen first.
+	 */
+	public static function wp_off() {
+		if ( ! class_exists( 'SBSK_Modules' ) ) {
+			return [];
+		}
+
+		return array_values( array_intersect( (array) SBSK_Modules::instance()->setting( 'images', 'wp_off' ), self::OFFABLE ) );
+	}
 	/** Remember the size names we register, so we know what is safe to delete. */
 	public static function remember( array $names ) {
 		$owned = (array) get_option( self::OWNED_OPTION, [] );
@@ -70,6 +88,25 @@ class SBSK_Images_Rebuild {
 	}
 
 	/**
+	 * Take chosen sizes off the list once no image carries them.
+	 *
+	 * Called by the scan, which reads every image's metadata anyway. Once a
+	 * clear has removed a size from the whole library the choice has done its
+	 * job, and Stop clearing was the only way to take it off. If something
+	 * writes the size back later, it shows under Leftover sizes again, unticked,
+	 * for a fresh decision. Returns the names taken off.
+	 */
+	public static function forget_adopted_unused( array $carried ) {
+		$unused = array_values( array_diff( self::adopted(), array_map( 'strval', $carried ) ) );
+
+		if ( $unused ) {
+			self::unadopt( $unused );
+		}
+
+		return $unused;
+	}
+
+	/**
 	 * Sizes this attachment carries that nothing registers, Site Kit never
 	 * owned and nobody has chosen to clear: leftovers from a snippet, theme or
 	 * plugin. Listed on the Image Cleaner page, never cleared until chosen.
@@ -78,7 +115,7 @@ class SBSK_Images_Rebuild {
 		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 		$have = array_keys( (array) ( $meta['sizes'] ?? [] ) );
 
-		return array_values( array_diff( $have, array_keys( self::all_wanted() ), self::owned(), self::adopted() ) );
+		return array_values( array_diff( $have, array_keys( self::all_wanted() ), self::owned(), self::adopted(), self::wp_off() ) );
 	}
 
 	/** The files one size of one attachment has on disk, WebP and AVIF copies included. */
@@ -89,7 +126,11 @@ class SBSK_Images_Rebuild {
 			return $found;
 		}
 
-		$path = $folder . '/' . $meta['sizes'][ $name ]['file'];
+		$path = self::size_path( $folder, $meta['sizes'][ $name ]['file'] );
+
+		if ( $path === '' ) {
+			return $found;
+		}
 
 		foreach ( [ $path, $path . '.webp', $path . '.avif' ] as $candidate ) {
 			if ( file_exists( $candidate ) ) {
@@ -99,6 +140,43 @@ class SBSK_Images_Rebuild {
 		}
 
 		return $found;
+	}
+
+	/**
+	 * Whether an attachment's own file is missing from disk. Nothing can be
+	 * built from it, so it is left out of Sizes to build and listed under
+	 * Missing images instead.
+	 */
+	public static function original_missing( $id ) {
+		$file = get_attached_file( $id );
+
+		return ! $file || ! file_exists( $file );
+	}
+
+	/**
+	 * Where a size file is on disk.
+	 *
+	 * WordPress records a size as a bare file name beside the original. Elementor
+	 * writes the custom sizes its widgets ask for to uploads/elementor/thumbs/ and
+	 * records them with that path, from the uploads folder. Looking beside the
+	 * original found nothing there, so the scan counted no files and a clear
+	 * dropped the entry but left the file. A name with a folder in it is read from
+	 * the uploads folder. Anything that would climb out of it gives an empty path.
+	 */
+	public static function size_path( $folder, $file ) {
+		$file = (string) $file;
+
+		if ( $file === '' || strpos( $file, chr( 0 ) ) !== false || preg_match( '#(^|/)\.\.(/|$)#', $file ) ) {
+			return '';
+		}
+
+		if ( strpos( $file, '/' ) === false ) {
+			return untrailingslashit( (string) $folder ) . '/' . $file;
+		}
+
+		$uploads = wp_upload_dir( null, false );
+
+		return trailingslashit( $uploads['basedir'] ) . ltrim( $file, '/' );
 	}
 
 	/** The size names the settings ask for right now. */
@@ -157,7 +235,7 @@ class SBSK_Images_Rebuild {
 		$folder = trailingslashit( dirname( $file ) );
 
 		foreach ( (array) ( $meta['sizes'] ?? [] ) as $name => $size ) {
-			if ( empty( $size['file'] ) || ! file_exists( $folder . $size['file'] ) ) {
+			if ( empty( $size['file'] ) || ! file_exists( self::size_path( $folder, $size['file'] ) ) ) {
 				continue;
 			}
 
@@ -180,6 +258,11 @@ class SBSK_Images_Rebuild {
 		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 
 		if ( empty( $meta['width'] ) ) {
+			return [];
+		}
+
+		// Nothing can be made without the original.
+		if ( self::original_missing( $id ) ) {
 			return [];
 		}
 
@@ -227,7 +310,7 @@ class SBSK_Images_Rebuild {
 		// someone chose on the Image Cleaner page (adopted). Checked against what
 		// is registered at the moment of asking, so a chosen size that is
 		// registered again is never stale, and clean() asks again per image.
-		return array_values( array_intersect( array_diff( $have, array_keys( self::all_wanted() ) ), array_merge( self::owned(), self::adopted() ) ) );
+		return array_values( array_intersect( array_diff( $have, array_keys( self::all_wanted() ) ), array_merge( self::owned(), self::adopted(), self::wp_off() ) ) );
 	}
 
 	/** Remove a generated file and any WebP or AVIF written beside it. */
@@ -251,18 +334,89 @@ class SBSK_Images_Rebuild {
 			return true;
 		}
 
+		$owners = self::file_owners();
+		$id     = (int) $id;
+
+		if ( isset( $owners['shared'][ $file ] ) ) {
+			foreach ( array_keys( $owners['shared'][ $file ] ) as $owner ) {
+				if ( (int) $owner !== $id ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		return isset( $owners['first'][ $file ] ) && $owners['first'][ $file ] !== $id;
+	}
+
+	/** File names in attachment metadata, read once per request by file_owners(). */
+	private static $owners = null;
+
+	/**
+	 * Which attachments name each file in their metadata.
+	 *
+	 * file_has_other_owner() used to run one LIKE over every attachment's
+	 * metadata for each file it was about to delete. On villarealestate.com.au
+	 * (4,997 attachments, 14.5 MB of metadata) one of those took 150 ms, so
+	 * clearing twelve old sizes cost about 1.4 seconds an image. Reading all the
+	 * metadata once takes about 0.2 seconds and every check after that is an
+	 * array lookup.
+	 *
+	 * Built once per request, from what is stored when it is first asked for.
+	 * Clearing later in the same request only takes names out of the metadata,
+	 * so a name still listed here can only keep a file, never delete one that
+	 * is in use.
+	 *
+	 * The match is the same as the old query's: a serialised string value that
+	 * is exactly the file name, folder included where an entry carries one (an
+	 * Elementor custom size is stored as elementor/thumbs/<name>). Only values
+	 * ending in a file extension are kept, which leaves out mime types and the
+	 * rest of the metadata.
+	 *
+	 * @return array{first: array<string,int>, shared: array<string,array<int,bool>>}
+	 */
+	public static function file_owners() {
+		if ( self::$owners !== null ) {
+			return self::$owners;
+		}
+
 		global $wpdb;
 
-		$like  = '%' . $wpdb->esc_like( '"' . $file . '"' ) . '%';
-		$other = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attachment_metadata' AND post_id <> %d AND meta_value LIKE %s LIMIT 1",
-				(int) $id,
-				$like
-			)
-		);
+		$first  = [];
+		$shared = [];
+		$last   = 0;
 
-		return (bool) $other;
+		do {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT meta_id, post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attachment_metadata' AND meta_id > %d ORDER BY meta_id LIMIT 500",
+					$last
+				)
+			);
+
+			foreach ( (array) $rows as $row ) {
+				$last  = (int) $row->meta_id;
+				$owner = (int) $row->post_id;
+
+				if ( ! preg_match_all( '/s:\d+:"([^"]*\.[A-Za-z0-9]{2,5})";/', (string) $row->meta_value, $found ) ) {
+					continue;
+				}
+
+				foreach ( array_unique( $found[1] ) as $name ) {
+					if ( ! isset( $first[ $name ] ) ) {
+						$first[ $name ] = $owner;
+					} elseif ( $first[ $name ] !== $owner ) {
+						$shared[ $name ][ $first[ $name ] ] = true;
+						$shared[ $name ][ $owner ]          = true;
+					}
+				}
+			}
+		} while ( is_array( $rows ) && count( $rows ) === 500 );
+
+		self::$owners = [ 'first' => $first, 'shared' => $shared ];
+
+		return self::$owners;
 	}
 
 	public static function delete_file( $path ) {
@@ -304,7 +458,7 @@ class SBSK_Images_Rebuild {
 		// Remove sizes we own that are no longer wanted.
 		foreach ( self::stale( $id, $meta ) as $name ) {
 			if ( ! empty( $meta['sizes'][ $name ]['file'] ) ) {
-				$result['files'] += self::delete_file( $dir . '/' . $meta['sizes'][ $name ]['file'] );
+				$result['files'] += self::delete_file( self::size_path( $dir, $meta['sizes'][ $name ]['file'] ) );
 			}
 
 			unset( $meta['sizes'][ $name ] );
@@ -319,7 +473,7 @@ class SBSK_Images_Rebuild {
 				}
 
 				if ( ! empty( $meta['sizes'][ $name ]['file'] ) ) {
-					self::delete_file( $dir . '/' . $meta['sizes'][ $name ]['file'] );
+					self::delete_file( self::size_path( $dir, $meta['sizes'][ $name ]['file'] ) );
 				}
 
 				unset( $meta['sizes'][ $name ] );
@@ -497,7 +651,7 @@ class SBSK_Images_Rebuild {
 			$result['removed'][] = $name;
 
 			if ( $stale_file && ! self::file_has_other_owner( $id, $meta, $stale_file ) ) {
-				$result['files'] += self::delete_file( $folder . '/' . $stale_file );
+				$result['files'] += self::delete_file( self::size_path( $folder, $stale_file ) );
 			}
 		}
 
@@ -512,12 +666,22 @@ class SBSK_Images_Rebuild {
 	 * each old thumbnail, plus any WebP copy sitting beside it.
 	 */
 	public static function stale_files( $id, array $meta = null ) {
+		return self::stale_usage( $id, $meta )['files'];
+	}
+
+	/**
+	 * The files clearing would delete for one attachment and how much space
+	 * they take, for the Old thumbnails to clear figure. The scan checks each
+	 * file is there anyway, so its size costs one more look at the same file.
+	 */
+	public static function stale_usage( $id, array $meta = null ) {
 		$meta  = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 		$file  = get_attached_file( $id );
 		$count = 0;
+		$bytes = 0;
 
 		if ( ! $file ) {
-			return 0;
+			return [ 'files' => 0, 'bytes' => 0 ];
 		}
 
 		$folder = dirname( $file );
@@ -527,16 +691,21 @@ class SBSK_Images_Rebuild {
 				continue;
 			}
 
-			$path = $folder . '/' . $meta['sizes'][ $name ]['file'];
+			$path = self::size_path( $folder, $meta['sizes'][ $name ]['file'] );
+
+			if ( $path === '' ) {
+				continue;
+			}
 
 			foreach ( [ $path, $path . '.webp', $path . '.avif' ] as $candidate ) {
 				if ( file_exists( $candidate ) ) {
 					$count++;
+					$bytes += (int) filesize( $candidate );
 				}
 			}
 		}
 
-		return $count;
+		return [ 'files' => $count, 'bytes' => $bytes ];
 	}
 	/**
 	 * The name the existing thumbnails were built from.
@@ -681,6 +850,11 @@ class SBSK_Images_Rebuild {
 		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
 
 		if ( empty( $meta['width'] ) ) {
+			return [];
+		}
+
+		// Nothing can be made without the original.
+		if ( self::original_missing( $id ) ) {
 			return [];
 		}
 

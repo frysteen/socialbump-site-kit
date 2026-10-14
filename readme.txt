@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.25
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,20 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.2.0 =
+* Image Cleaner: clearing old thumbnails is much faster on a large library. Each image used to take over a second while it checked the files were not used by another image; that check now reads the library once. A long clear also no longer skips images part way through.
+* Image Cleaner: the notice after adding a size to Old thumbnails to clear (or taking one off) no longer pushes the page layout out of place.
+* Image Cleaner: sizes stored in another folder, such as Elementor custom sizes in uploads/elementor/thumbs, are now found and cleared properly. Before, they showed 0 files, and clearing one would have removed the record but left the file behind.
+* Image Cleaner: a size from another source that you chose to clear now drops off the list by itself once it has been cleared from every image, instead of needing Stop clearing.
+* Image Cleaner: only one build, clear or delete runs at a time. Opening Image Cleaner in another window (or as another person) while one is running now shows its progress live, with the buttons switched off until it finishes, instead of looking idle and letting a second run upset the first.
+* Image Cleaner: images in the Media Library whose file no longer exists are now shown as Missing images instead of as sizes to build. Click the figure to see each one with the address it should be at and the page it was uploaded to, and delete them all with Delete missing images.
+* Images: WordPress's larger sizes (medium_large, large, 1536x1536 and 2048x2048) can now be switched off in the Additional thumbnail sizes list on the Images page. A size that is off is no longer made on upload, and its existing files show under Old thumbnails to clear on the next scan.
+* Image Cleaner: Old thumbnails to clear now shows how much space its files take, so you can see what a clear will free up.
+* Image Cleaner: an orphaned original image can be put back in the Media Library with Add to library, beside it in the orphan list. Originals are now listed first, above their thumbnails.
+* Images: the Media Library thumbnail size and fit choices now also work in the media pop-up wherever it opens, such as a post's featured image or a gallery field, with the same two dropdowns in its toolbar.
+* Images: in the media pop-up opened from a post list, such as Admin Columns inline edit of a featured image, a Filter by folder dropdown now lists your HappyFiles folders, since HappyFiles leaves its folder panel out there.
+* Images: the Media Library thumbnail size toggle is now called Media Browser Enhancements, with a fuller description of what it covers. The HappyFiles folder dropdown only runs when HappyFiles is active.
+
 = 1.1.25 =
 * Image Cleaner: image sizes registered by a code snippet, theme or another plugin and later removed can now be cleared. They are listed separately under Leftover sizes from other sources, unticked, with a warning where a size looks like it belongs to a plugin or theme or is still named in pages or code. Ticking one adds it to Old thumbnails to clear, and it can be taken off again. A size that is registered again is never cleared, and a file shared with a size still in use is kept.
 * New: Media Library thumbnail size, under Image extras on the Images page. The Media Library grid gets two dropdowns: thumbnail size (Standard, Large or X-Large) and fit (Cropped squares or Whole image). Each person's choice is remembered. On by default.
