@@ -167,6 +167,7 @@ class SBSK_Images_Tools {
 		$stale_files = 0;
 		$stale_names = [];
 		$rows        = [];
+		$foreign     = [];
 
 		foreach ( $ids as $id ) {
 			$meta   = (array) wp_get_attachment_metadata( $id );
@@ -194,7 +195,35 @@ class SBSK_Images_Tools {
 					$stale_names[ $name ] = true;
 				}
 			}
+
+			// Leftovers from other sources, counted in the same pass so the
+			// library is only walked once.
+			$others = SBSK_Images_Rebuild::foreign( $id, $meta );
+
+			if ( $others ) {
+				$attached = get_attached_file( $id );
+				$folder   = $attached ? dirname( $attached ) : '';
+
+				foreach ( $others as $name ) {
+					if ( ! isset( $foreign[ $name ] ) ) {
+						$foreign[ $name ] = [ 'images' => 0, 'files' => 0, 'bytes' => 0 ];
+					}
+
+					$on_disk = SBSK_Images_Rebuild::size_files( $meta, $name, $folder );
+
+					$foreign[ $name ]['images']++;
+					$foreign[ $name ]['files'] += $on_disk['files'];
+					$foreign[ $name ]['bytes'] += $on_disk['bytes'];
+				}
+			}
 		}
+
+		uasort(
+			$foreign,
+			function ( $a, $b ) {
+				return $b['bytes'] <=> $a['bytes'];
+			}
+		);
 
 		$library = self::library_total();
 
@@ -208,6 +237,7 @@ class SBSK_Images_Tools {
 			'stale_sizes' => $stale_sizes,
 			'stale_files' => $stale_files,
 			'stale_names' => array_keys( $stale_names ),
+			'foreign'     => $foreign,
 			'rows'        => $rows,
 		];
 	}
@@ -716,6 +746,140 @@ class SBSK_Images_Tools {
 	/** Our sizes for one image, marking any that are absent. */
 
 	/** A plain summary of the library, so there is something to decide from. */
+	/**
+	 * Leftover sizes from other sources, and the ones already chosen for
+	 * clearing.
+	 *
+	 * A size registered by a snippet, theme or plugin and later removed is not
+	 * Site Kit's to delete, so it is only listed here, unticked. Ticking one and
+	 * saving adds it to Old thumbnails to clear (SBSK_Images_Rebuild::adopt()),
+	 * and it can be taken off again from the list underneath.
+	 */
+	private static function foreign_html( array $foreign ) {
+		$adopted = SBSK_Images_Rebuild::adopted();
+
+		if ( ! $foreign && ! $adopted ) {
+			return '';
+		}
+
+		$post = esc_url( admin_url( 'admin-post.php' ) );
+		$html = '<div class="sbsk-report__foreign">';
+
+		if ( $foreign ) {
+			$html .= '<h3 class="sbsk-report__title">' . esc_html__( 'Leftover sizes from other sources', 'sb-site-kit' ) . '</h3>';
+			$html .= '<p class="sbsk-report__note">' . esc_html__( 'These sizes were registered by something other than Site Kit and no longer exist. Only tick a size if you removed it on purpose.', 'sb-site-kit' ) . '</p>';
+			$html .= '<form method="post" action="' . $post . '"><input type="hidden" name="action" value="sbsk_adopt_sizes">' . wp_nonce_field( 'sbsk_adopt_sizes', '_wpnonce', true, false );
+			$html .= '<table class="sbsk-report"><tbody>';
+
+			foreach ( $foreign as $name => $found ) {
+				$html .= '<tr><td class="sbsk-report__file"><label class="sbsk-report__name"><input type="checkbox" name="sbsk_adopt[]" value="' . esc_attr( $name ) . '"> <code>' . esc_html( $name ) . '</code></label>';
+
+				foreach ( self::size_warnings( $name ) as $warning ) {
+					$html .= '<span class="sbsk-report__used">' . esc_html( $warning ) . '</span>';
+				}
+
+				$html .= '</td><td class="sbsk-report__size">';
+				/* translators: 1: number of images, 2: number of files */
+				$html .= esc_html( sprintf( __( '%1$s, %2$s', 'sb-site-kit' ), sprintf( _n( '%s image', '%s images', $found['images'], 'sb-site-kit' ), number_format_i18n( $found['images'] ) ), sprintf( _n( '%s file', '%s files', $found['files'], 'sb-site-kit' ), number_format_i18n( $found['files'] ) ) ) );
+				$html .= '</td><td class="sbsk-report__size">' . esc_html( size_format( $found['bytes'] ) ) . '</td></tr>';
+			}
+
+			$html .= '</tbody></table>';
+			$html .= '<p class="sbsk-report__note">' . esc_html__( 'Remove old sizes deletes the files and also removes each size from the image records in the database, so take a database backup first.', 'sb-site-kit' ) . '</p>';
+			$html .= '<p><button type="submit" class="button">' . esc_html__( 'Add ticked to Old thumbnails to clear', 'sb-site-kit' ) . '</button></p>';
+			$html .= '</form>';
+		}
+
+		if ( $adopted ) {
+			$registered = SBSK_Images_Rebuild::all_wanted();
+
+			$html .= '<h3 class="sbsk-report__title">' . esc_html__( 'Other sizes chosen for clearing', 'sb-site-kit' ) . '</h3>';
+			$html .= '<form method="post" action="' . $post . '"><input type="hidden" name="action" value="sbsk_unadopt_sizes">' . wp_nonce_field( 'sbsk_unadopt_sizes', '_wpnonce', true, false );
+			$html .= '<table class="sbsk-report"><tbody>';
+
+			foreach ( $adopted as $name ) {
+				$html .= '<tr><td class="sbsk-report__file"><span class="sbsk-report__name"><code>' . esc_html( $name ) . '</code>';
+
+				if ( isset( $registered[ $name ] ) ) {
+					$html .= '<span class="sbsk-report__used">' . esc_html__( 'registered again, so never cleared', 'sb-site-kit' ) . '</span>';
+				}
+
+				$html .= '</span></td><td class="sbsk-report__action"><button type="submit" class="button" name="sbsk_unadopt" value="' . esc_attr( $name ) . '">' . esc_html__( 'Stop clearing', 'sb-site-kit' ) . '</button></td></tr>';
+			}
+
+			$html .= '</tbody></table></form>';
+		}
+
+		return $html . '</div>';
+	}
+
+	/**
+	 * Reasons to think twice before choosing a leftover size for clearing.
+	 *
+	 * Warnings, never blocks: a widget can still name a size that no longer
+	 * does anything. A size can also only look removed because the plugin or
+	 * theme that registers it is switched off, or registers it only on the
+	 * front end.
+	 */
+	private static function size_warnings( $name ) {
+		global $wpdb;
+
+		$warnings = [];
+
+		if ( preg_match( '/^(woocommerce|shop_|wc[-_]|et[-_]pb|elementor|jet[-_]|astra|kadence|generate|blocksy|bricks|avada|fusion|divi|ocean|neve|twentytwenty)/i', $name ) ) {
+			$warnings[] = __( 'Looks like it belongs to a plugin or theme. If that is only switched off, its images will need this size again.', 'sb-site-kit' );
+		}
+
+		$quoted = '%' . $wpdb->esc_like( '"' . $name . '"' ) . '%';
+		$pages  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(DISTINCT pm.post_id) FROM {$wpdb->postmeta} pm JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE pm.meta_key = '_elementor_data' AND p.post_type <> 'revision' AND pm.meta_value LIKE %s", $quoted ) );
+		$pages += (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type <> 'revision' AND ( post_content LIKE %s OR post_content LIKE %s )", '%' . $wpdb->esc_like( 'size-' . $name ) . '%', '%' . $wpdb->esc_like( '"sizeSlug":"' . $name . '"' ) . '%' ) );
+
+		if ( $pages ) {
+			/* translators: %s: number of pages */
+			$warnings[] = sprintf( _n( 'Named in %s page or template.', 'Named in %s pages or templates.', $pages, 'sb-site-kit' ), number_format_i18n( $pages ) );
+		}
+
+		// Code snippet plugins keep their snippets in tables of their own.
+		$in_code = false;
+
+		foreach ( (array) $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', '%' . $wpdb->esc_like( 'snippet' ) . '%' ) ) as $table ) {
+			foreach ( (array) $wpdb->get_results( 'SHOW COLUMNS FROM `' . esc_sql( $table ) . '`' ) as $column ) {
+				if ( preg_match( '/text|char/i', $column->Type ) && $wpdb->get_var( $wpdb->prepare( 'SELECT 1 FROM `' . esc_sql( $table ) . '` WHERE `' . esc_sql( $column->Field ) . '` LIKE %s LIMIT 1', '%' . $wpdb->esc_like( $name ) . '%' ) ) ) {
+					$in_code = true;
+					break 2;
+				}
+			}
+		}
+
+		// And the active theme's own files.
+		if ( ! $in_code ) {
+			$checked = 0;
+
+			foreach ( array_unique( [ get_stylesheet_directory(), get_template_directory() ] ) as $dir ) {
+				if ( ! is_dir( $dir ) ) {
+					continue;
+				}
+
+				foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ) ) as $file ) {
+					if ( substr( (string) $file, -4 ) !== '.php' || ++$checked > 800 ) {
+						continue;
+					}
+
+					if ( strpos( (string) file_get_contents( (string) $file ), $name ) !== false ) {
+						$in_code = true;
+						break 2;
+					}
+				}
+			}
+		}
+
+		if ( $in_code ) {
+			$warnings[] = __( 'Still mentioned in a code snippet or the theme, perhaps commented out. Check it is not registered only sometimes.', 'sb-site-kit' );
+		}
+
+		return $warnings;
+	}
+
 	public static function ajax_report() {
 		self::guard();
 
@@ -794,6 +958,7 @@ class SBSK_Images_Tools {
 
 		$html .= '</div>';
 		$html .= self::missing_list( $summary );
+		$html .= self::foreign_html( $summary['foreign'] );
 
 		if ( $orphans['files'] ) {
 			$rows = '';

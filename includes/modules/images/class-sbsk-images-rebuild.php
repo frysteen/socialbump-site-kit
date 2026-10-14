@@ -19,6 +19,14 @@ class SBSK_Images_Rebuild {
 
 	const OWNED_OPTION = 'sb_tweaks_site_kit_owned_image_sizes';
 
+	/**
+	 * Sizes registered by something other than Site Kit (a snippet, a theme,
+	 * another plugin), since removed, that someone chose on the Image Cleaner
+	 * page to clear as well. Kept apart from the owned list so it is plain
+	 * which sizes were added by hand, and so each can be taken off again.
+	 */
+	const ADOPTED_OPTION = 'sb_tweaks_site_kit_adopted_image_sizes';
+
 	/** Remember the size names we register, so we know what is safe to delete. */
 	public static function remember( array $names ) {
 		$owned = (array) get_option( self::OWNED_OPTION, [] );
@@ -31,6 +39,66 @@ class SBSK_Images_Rebuild {
 
 	public static function owned() {
 		return (array) get_option( self::OWNED_OPTION, [] );
+	}
+
+	/** Leftover sizes from other sources chosen for clearing. */
+	public static function adopted() {
+		return array_values( array_filter( array_map( 'strval', (array) get_option( self::ADOPTED_OPTION, [] ) ) ) );
+	}
+
+	/**
+	 * Choose leftover sizes from other sources for clearing.
+	 *
+	 * A size registered right now is never taken, whatever was ticked: it is
+	 * live, and its files are in use. Nor is one Site Kit already owns. Returns
+	 * the names actually added.
+	 */
+	public static function adopt( array $names ) {
+		$names = array_unique( array_filter( array_map( 'strval', $names ) ) );
+		$names = array_values( array_diff( $names, array_keys( self::all_wanted() ), self::owned() ) );
+
+		if ( $names ) {
+			update_option( self::ADOPTED_OPTION, array_values( array_unique( array_merge( self::adopted(), $names ) ) ), false );
+		}
+
+		return $names;
+	}
+
+	/** Stop clearing sizes chosen earlier. */
+	public static function unadopt( array $names ) {
+		update_option( self::ADOPTED_OPTION, array_values( array_diff( self::adopted(), array_map( 'strval', $names ) ) ), false );
+	}
+
+	/**
+	 * Sizes this attachment carries that nothing registers, Site Kit never
+	 * owned and nobody has chosen to clear: leftovers from a snippet, theme or
+	 * plugin. Listed on the Image Cleaner page, never cleared until chosen.
+	 */
+	public static function foreign( $id, array $meta = null ) {
+		$meta = $meta === null ? (array) wp_get_attachment_metadata( $id ) : $meta;
+		$have = array_keys( (array) ( $meta['sizes'] ?? [] ) );
+
+		return array_values( array_diff( $have, array_keys( self::all_wanted() ), self::owned(), self::adopted() ) );
+	}
+
+	/** The files one size of one attachment has on disk, WebP and AVIF copies included. */
+	public static function size_files( array $meta, $name, $folder ) {
+		$found = [ 'files' => 0, 'bytes' => 0 ];
+
+		if ( empty( $meta['sizes'][ $name ]['file'] ) || $folder === '' ) {
+			return $found;
+		}
+
+		$path = $folder . '/' . $meta['sizes'][ $name ]['file'];
+
+		foreach ( [ $path, $path . '.webp', $path . '.avif' ] as $candidate ) {
+			if ( file_exists( $candidate ) ) {
+				$found['files']++;
+				$found['bytes'] += (int) filesize( $candidate );
+			}
+		}
+
+		return $found;
 	}
 
 	/** The size names the settings ask for right now. */
@@ -154,7 +222,12 @@ class SBSK_Images_Rebuild {
 		// off, and those files are live: comparing with our list alone called 1,234
 		// working thumbnails old sizes to clear on feelsoma.com. A size anyone
 		// registers is never stale, whoever made the files.
-		return array_values( array_intersect( array_diff( $have, array_keys( self::all_wanted() ) ), self::owned() ) );
+		//
+		// Only sizes Site Kit registered itself, plus leftovers from other sources
+		// someone chose on the Image Cleaner page (adopted). Checked against what
+		// is registered at the moment of asking, so a chosen size that is
+		// registered again is never stale, and clean() asks again per image.
+		return array_values( array_intersect( array_diff( $have, array_keys( self::all_wanted() ) ), array_merge( self::owned(), self::adopted() ) ) );
 	}
 
 	/** Remove a generated file and any WebP or AVIF written beside it. */

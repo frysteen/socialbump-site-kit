@@ -24,8 +24,12 @@ class SBSK_Images {
 		add_action( 'admin_post_sbsk_save_images', [ __CLASS__, 'save' ] );
 		require_once __DIR__ . '/class-sbsk-images-rebuild.php';
 		require_once __DIR__ . '/class-sbsk-images-zoom.php';
+		require_once __DIR__ . '/class-sbsk-images-media-grid.php';
+		require_once __DIR__ . '/class-sbsk-images-media-search.php';
 
 		SBSK_Images_Zoom::boot();
+		SBSK_Images_Media_Grid::boot();
+		SBSK_Images_Media_Search::boot();
 	}
 
 	public static function setting( $key, $fallback = null ) {
@@ -243,6 +247,8 @@ class SBSK_Images {
 			'clean_titles' => empty( $_POST['sbsk_clean_titles'] ) ? 0 : 1,
 			'auto_alt'     => empty( $_POST['sbsk_auto_alt'] ) ? 0 : 1,
 			'gallery_zoom' => empty( $_POST['sbsk_gallery_zoom'] ) ? 0 : 1,
+			'media_grid'   => empty( $_POST['sbsk_media_grid'] ) ? 0 : 1,
+			'media_search' => empty( $_POST['sbsk_media_search'] ) ? 0 : 1,
 		];
 
 		update_option( SBSK_Modules::SETTINGS_OPTION, $settings );
@@ -315,6 +321,8 @@ class SBSK_Images {
 		// Image extras
 		echo '<section class="sbsk-section"><div class="sbsk-section__head"><h2>' . esc_html__( 'Image extras', 'sb-site-kit' ) . '</h2></div><div class="sbsk-grid">';
 		echo self::checkbox( 'sbsk_gallery_zoom', (bool) self::setting( 'gallery_zoom', 0 ), __( 'Gutenberg image zoom', 'sb-site-kit' ), __( 'The gallery and image blocks get an Enable zoom option and a popup size. The size on the page stays the block\'s own Resolution setting.', 'sb-site-kit' ) );
+		echo self::checkbox( 'sbsk_media_grid', (bool) self::setting( 'media_grid', 1 ), __( 'Media Library thumbnail size', 'sb-site-kit' ), __( 'Adds two choices to the Media Library grid: thumbnail size (Standard, Large or X-Large), and Cropped squares or Whole image. Each person\'s choice is remembered.', 'sb-site-kit' ) );
+		echo self::checkbox( 'sbsk_media_search', (bool) self::setting( 'media_search', 1 ), __( 'Better media search', 'sb-site-kit' ), __( 'Media searches also look at alt text and the file name, including the name it was uploaded with. A pasted image URL finds its image.', 'sb-site-kit' ) );
 		echo '</div></section>';
 
 		echo '</div>';

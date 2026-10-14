@@ -852,6 +852,8 @@ are the three rules worth reading before you touch it.
 | sb_tweaks_site_kit_kept_orphans | files in uploads it was told to leave alone, kept as paths relative to the uploads folder |
 | sb_tweaks_site_kit_image_split | that the Image Cleaner split migration has run, and which scheme |
 | sb_tweaks_site_kit_cleaner_sizes (user meta) | the sizes each user has ticked on the Image Cleaner page |
+| sb_tweaks_site_kit_adopted_image_sizes | removed sizes from other sources that someone chose to clear on the Image Cleaner page |
+| sb_tweaks_site_kit_media_grid (user meta) | each user's Media Library grid size and fit |
 | sbsk_images_run_<user>_<mode>, sbsk_orphans_run_<user> (transients) | the id or path list held for a run, ten minutes, one per tool so a build and a clean never share a list |
 | socialbump_cards (user meta) | each user's card order and collapsed cards, per page key |
 | sbsk_github_token | encrypted, hub only, and deleted on any site that is not the hub |
@@ -1601,3 +1603,137 @@ Verified on Villa: the new index found 1,399 names against 732, saw
 web_dji_0218.jpg in an Elementor page that the old one missed, named the page,
 and agreed with an independent scan of all 146 tables and 243 text files that
 none of the 1,319 orphans was in use. Reading the whole site took 0.6s.
+
+## Leftover sizes from other sources (October 2026)
+
+Found on villarealestate.com.au: 12 sizes (image-{480..2000}-square and -4x3)
+registered by a WPCodeBox snippet were commented out, but Old thumbnails to clear
+showed 0 while 4,894 attachments still listed them (about 13 GB with WebP),
+because stale() only counts sizes in the owned list (OWNED_OPTION), which holds
+sizes Site Kit registered itself. That filter stays: it stopped 1,234 live
+thumbnails on feelsoma.com being called stale.
+
+Now:
+- SBSK_Images_Rebuild::foreign() lists sizes an attachment carries that are not
+  registered (all_wanted), not owned and not adopted. Tools::summary() collects
+  them in the same pass as 'foreign' => name => images, files (with .webp and
+  .avif) and bytes, via size_files().
+- The report shows them under Leftover sizes from other sources, unticked, with
+  size_warnings(): a plugin or theme style prefix, the name in _elementor_data
+  or in post content (size-NAME, sizeSlug), or the name in a snippet table
+  (any table matching %snippet%) or the active theme's PHP. Warnings, not blocks.
+- Ticking and saving posts to admin_post_sbsk_adopt_sizes (manage_options),
+  which calls adopt(): names currently registered or owned are refused, the
+  rest go in ADOPTED_OPTION (sb_tweaks_site_kit_adopted_image_sizes), separate from owned.
+  Other sizes chosen for clearing lists them, each with Stop clearing
+  (admin_post_sbsk_unadopt_sizes, unadopt()).
+- stale() intersects with owned + adopted, against what is registered at that
+  moment, and clean() asks stale() per image during removal, so a size
+  registered again is never cleared. file_has_other_owner() still guards each
+  file, so a file shared with a kept size stays and only the entry goes.
+
+Tested on the hub with image 489: a foreign size and one sharing the thumbnail
+file listed as foreign, not stale; adopt() refused 'thumbnail'; both stale once
+adopted; registering one again made it not stale; un-adopting dropped it; clean()
+removed the entries, deleted the size's own file and its .webp, kept the shared
+thumbnail; Site Kit's own (owned) sizes behaved as before.
+
+## Media Library thumbnail size (October 2026)
+
+A switch under Image extras on the Images page, media_grid in the images
+settings, on until someone turns it off. SBSK_Images_Media_Grid in
+modules/images, booted by SBSK_Images::boot() like the zoom, with
+assets/js/media-grid.js and assets/css/media-grid.css. Media, Library in grid
+view gets two dropdowns after Bulk select: Standard, Large or X-Large
+thumbnails, and Cropped squares or Whole image. The choice is per user, in the
+sb_tweaks_site_kit_media_grid user meta, saved over AJAX (sbsk_media_grid_save,
+needs upload_files) the moment a dropdown changes. List view loads nothing.
+
+WordPress has no setting for any of this, so it works on the grid's own
+scripts:
+
+- Size is the column width WordPress aims for. The Attachments view works out
+  its columns as the browser width over idealColumnWidth (150, or 135 under 640
+  wide), capped at 12, and the CSS sizes tiles from data-columns. Standard keeps
+  150, Large asks for 240, X-Large 360. The script wraps
+  AttachmentsBrowser.createToolbar, which runs before createAttachments, so the
+  width is in place for the first draw, and the dropdowns go in with
+  toolbar.set at priority -60, on the left.
+- A bigger tile needs a bigger file. Tiles normally show the medium size, which
+  goes soft at 360 wide on a high density screen. Attachment.imageSize is
+  wrapped for grid tiles only: Large uses medium on a normal screen and large on
+  a high density one, X-Large always large, falling back to the original when
+  no large copy exists and it is 2560 or less wide. The browser only knows
+  thumbnail, medium, large and full, because those are what
+  wp_prepare_attachment_for_js sends.
+- Changing size sets the new width, calls setColumns() and re-renders every
+  tile already drawn (_viewsByCid), so the new files load in place without a
+  reload.
+- Fit is CSS only. Standard with Cropped squares is left exactly as WordPress
+  draws it. Anything else draws the image at full tile size with object-fit,
+  cover for cropped and contain for whole, and takes off WordPress's translate
+  centring. Only image tiles (.type-image) are touched, so document and video
+  icons look as they always have. The body classes sbsk-grid-size-* and
+  sbsk-grid-fit-* come from admin_body_class, so a reload never flashes the
+  old layout first.
+- Masonry was left out on purpose. The grid's arrow keys, selection and
+  infinite scroll all assume equal tiles in rows, and HappyFiles hooks into the
+  same grid. Whole image in a square tile shows the full picture without
+  fighting any of that.
+
+It was its own module for an hour, and that broke the Images page: a second
+module in the images section turns the page into a card grid with the Images
+settings drawn underneath, header and all. An extra for an existing page
+belongs in that page's settings, not in a module of its own.
+
+Worth knowing: X-Large loads the large copy for every tile, several times the
+weight of the medium one, so a page of tiles is noticeably heavier on a slow
+connection.
+
+## Better media search (October 2026)
+
+A switch under Image extras on the Images page, media_search in the images
+settings, on until someone turns it off. SBSK_Images_Media_Search in
+modules/images, booted by SBSK_Images::boot().
+
+What WordPress does on its own, read from the 7.1.3 source:
+
+- Searches post_title, post_excerpt and post_content, word by word, every
+  word required. Alt text is never searched.
+- Adds the file name only when the caller adds the wp_allow_query_attachment_
+  by_filename filter first: query-attachments (the grid and every media
+  modal), list view and the REST media route all do. WP_Query reads that
+  filter and then calls remove_all_filters() on it, so whichever WP_Query runs
+  next uses it up. If a plugin runs a query of its own in between, the real
+  search loses its file names. HappyFiles has a comment about exactly this.
+- The file it checks is _wp_attached_file. A photo over 2560 is stored as
+  name-scaled.jpg, and an upload is renamed by sanitize_file_name(), so
+  "Test Photo (1).JPG" is saved as Test-Photo-1-scaled.jpg. Searching the name
+  it was uploaded with, or the unscaled name, found nothing.
+
+Measured on the hub with a 3000 x 2000 test upload named Test Photo (1).JPG
+(deleted afterwards): before, the upload name, Test-Photo-1.jpg, the alt text,
+a size file name and a pasted URL all found nothing. After, all of them find it,
+and every search that worked before still gives the same results.
+
+How it works: posts_search at priority 20, only when the query is for
+attachments alone, has a search, and is in wp-admin, admin AJAX or REST. The
+front end is never touched. It replaces the WHERE clause with:
+
+- each word (as WordPress parsed it, so stopwords, quotes and -exclusions
+  behave as before) in the title, caption, description, _wp_attached_file or
+  _wp_attachment_image_alt;
+- OR the whole search read as a file name: file_variants() takes the last part
+  of a URL or path, the sanitize_file_name() version, and the name without its
+  extension and without -WxH, -scaled, -rotated or -e<timestamp>, and matches
+  any of them against _wp_attached_file or _wp_attachment_metadata, which holds
+  original_image and every size file. Skipped when a -word is present, since
+  the OR would bring back what was excluded.
+
+Meta is matched through EXISTS subqueries rather than joins, so there are no
+duplicate rows and nothing depends on core's sq1 join being there. Filters:
+sbsk/media_search/applies and sbsk/media_search/file_variants.
+
+Not changed: HappyFiles limits a search to the folder that is open. That is
+HappyFiles' own behaviour, and a search from inside a folder only looks in
+that folder.

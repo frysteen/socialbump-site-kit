@@ -28,6 +28,8 @@ class SBSK_Images_Cleaner {
 		SBSK_Images_Tools::boot();
 
 		add_action( 'admin_post_sbsk_save_cleaner_sizes', [ __CLASS__, 'save_sizes' ] );
+		add_action( 'admin_post_sbsk_adopt_sizes', [ __CLASS__, 'adopt_sizes' ] );
+		add_action( 'admin_post_sbsk_unadopt_sizes', [ __CLASS__, 'unadopt_sizes' ] );
 	}
 
 	const CHOICE_META = 'sb_tweaks_site_kit_cleaner_sizes';
@@ -104,6 +106,39 @@ class SBSK_Images_Cleaner {
 	 * the button stays quiet until something is ticked, the reminder follows you
 	 * down the page, and leaving with changes pending warns first.
 	 */
+	/** Choose leftover sizes from other sources for clearing. Admins only. */
+	public static function adopt_sizes() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do that.', 'sb-site-kit' ) );
+		}
+
+		check_admin_referer( 'sbsk_adopt_sizes' );
+
+		$asked = isset( $_POST['sbsk_adopt'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['sbsk_adopt'] ) ) : [];
+		$added = SBSK_Images_Rebuild::adopt( $asked );
+
+		wp_safe_redirect( add_query_arg( [ 'sbsk_adopted' => count( $added ), 'sbsk_refused' => count( array_unique( $asked ) ) - count( $added ) ], admin_url( 'admin.php?page=' . SBSK_Settings::module_page_slug( 'image-cleaner' ) ) ) );
+		exit;
+	}
+
+	/** Stop clearing a size chosen earlier. Admins only. */
+	public static function unadopt_sizes() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do that.', 'sb-site-kit' ) );
+		}
+
+		check_admin_referer( 'sbsk_unadopt_sizes' );
+
+		$name = isset( $_POST['sbsk_unadopt'] ) ? sanitize_text_field( wp_unslash( $_POST['sbsk_unadopt'] ) ) : '';
+
+		if ( $name !== '' ) {
+			SBSK_Images_Rebuild::unadopt( [ $name ] );
+		}
+
+		wp_safe_redirect( add_query_arg( 'sbsk_unadopted', 1, admin_url( 'admin.php?page=' . SBSK_Settings::module_page_slug( 'image-cleaner' ) ) ) );
+		exit;
+	}
+
 	public static function save_sizes() {
 		if ( ! current_user_can( 'upload_files' ) ) {
 			wp_die( esc_html__( 'You do not have permission to do that.', 'sb-site-kit' ) );
@@ -129,7 +164,11 @@ class SBSK_Images_Cleaner {
 		wp_nonce_field( 'sbsk_save_cleaner_sizes' );
 		echo '<section class="sbsk-section sbsk-cleaner__sizes" id="sbsk-cleaner-sizes">';
 		echo '<div class="sbsk-section__head"><div class="sbsk-section__row"><h2>' . esc_html__( 'Sizes', 'sb-site-kit' ) . '</h2>';
-		echo '<a class="sbsk-section__edit" href="' . esc_url( admin_url( 'admin.php?page=' . SBSK_Settings::group_page_slug( 'images' ) ) ) . '">' . esc_html__( 'Edit Sizes', 'sb-site-kit' ) . '</a></div>';
+		// The Images page only exists while Images is switched on.
+		if ( SBSK_Modules::instance()->is_enabled( 'images' ) ) {
+			echo '<a class="sbsk-section__edit" href="' . esc_url( admin_url( 'admin.php?page=' . SBSK_Settings::group_page_slug( 'images' ) ) ) . '">' . esc_html__( 'Edit Sizes', 'sb-site-kit' ) . '</a>';
+		}
+		echo '</div>';
 		echo '<p>' . esc_html__( 'Tick the sizes the scan, Build and Remove old sizes should work on. Saved for you, not the site.', 'sb-site-kit' ) . '</p></div>';
 
 		foreach ( self::size_groups() as $key => $group ) {
@@ -165,6 +204,24 @@ class SBSK_Images_Cleaner {
 	 */
 	public static function render_page() {
 		echo '<div class="sbsk-cleaner">';
+
+		if ( isset( $_GET['sbsk_adopted'] ) ) {
+			$added   = (int) $_GET['sbsk_adopted'];
+			$refused = (int) ( $_GET['sbsk_refused'] ?? 0 );
+			/* translators: %s: number of sizes */
+			$message = sprintf( _n( '%s size added to Old thumbnails to clear. Scan again to see it there.', '%s sizes added to Old thumbnails to clear. Scan again to see them there.', $added, 'sb-site-kit' ), number_format_i18n( $added ) );
+
+			if ( $refused ) {
+				/* translators: %s: number of sizes */
+				$message .= ' ' . sprintf( _n( '%s was left out because it is registered again.', '%s were left out because they are registered again.', $refused, 'sb-site-kit' ), number_format_i18n( $refused ) );
+			}
+
+			echo '<div class="notice notice-success inline"><p>' . esc_html( $message ) . '</p></div>';
+		}
+
+		if ( isset( $_GET['sbsk_unadopted'] ) ) {
+			echo '<div class="notice notice-success inline"><p>' . esc_html__( 'That size will no longer be cleared.', 'sb-site-kit' ) . '</p></div>';
+		}
 		self::render_sizes();
 
 		echo '<section class="sbsk-section sbsk-rebuild" id="sbsk-rebuild" data-nonce="' . esc_attr( wp_create_nonce( 'sbsk_images' ) ) . '">';

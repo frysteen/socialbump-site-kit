@@ -1,0 +1,48 @@
+/* Site Kit: Media Library grid thumbnail size and fit. */
+
+.sbsk-grid-picker {
+	display: inline-block;
+	vertical-align: top;
+}
+
+/*
+ * Standard + Cropped squares is left exactly as WordPress draws it.
+ * Any other choice draws the image with object-fit, which fills the tile
+ * properly even when the file is smaller than the tile.
+ */
+body.sbsk-grid-size-large #wp-media-grid .attachment-preview.type-image .thumbnail .centered,
+body.sbsk-grid-size-xlarge #wp-media-grid .attachment-preview.type-image .thumbnail .centered,
+body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered {
+	transform: none;
+}
+
+body.sbsk-grid-size-large #wp-media-grid .attachment-preview.type-image .thumbnail .centered img,
+body.sbsk-grid-size-xlarge #wp-media-grid .attachment-preview.type-image .thumbnail .centered img,
+body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered img {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	transform: none;
+	object-fit: cover;
+	object-position: center;
+}
+
+body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered img {
+	object-fit: contain;
+}
+
+/* Whole image: a little breathing room and a light backdrop. */
+body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image .thumbnail .centered {
+	top: 6px;
+	left: 6px;
+	width: calc( 100% - 12px );
+	height: calc( 100% - 12px );
+}
+
+body.sbsk-grid-fit-contain #wp-media-grid .attachment-preview.type-image {
+	background: #f6f7f7;
+}

@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.24
+Stable tag: 1.1.25
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,12 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.1.25 =
+* Image Cleaner: image sizes registered by a code snippet, theme or another plugin and later removed can now be cleared. They are listed separately under Leftover sizes from other sources, unticked, with a warning where a size looks like it belongs to a plugin or theme or is still named in pages or code. Ticking one adds it to Old thumbnails to clear, and it can be taken off again. A size that is registered again is never cleared, and a file shared with a size still in use is kept.
+* New: Media Library thumbnail size, under Image extras on the Images page. The Media Library grid gets two dropdowns: thumbnail size (Standard, Large or X-Large) and fit (Cropped squares or Whole image). Each person's choice is remembered. On by default.
+* New: Better media search, under Image extras on the Images page. Media searches now also look at alt text and the file name, including the name an image was uploaded with (WordPress renames uploads and adds -scaled to big photos, so those used to find nothing). A pasted image URL finds its image. On by default.
+* Image Cleaner: the Edit Sizes link is hidden while Images is switched off, since that page does not exist then and the link led to an error.
+
 = 1.1.24 =
 * Image Cleaner: the check for whether a file is still used now finds images inside Elementor pages, which it missed before (Elementor stores its pages as JSON, where the uploads address is written with escaped slashes), so those images could be listed as orphans. It also reads post excerpts, term and user meta, and JetEngine custom content tables, and understands URL encoded names. Log and history tables are still left out, so old log entries never hold a file back.
 
