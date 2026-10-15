@@ -798,7 +798,8 @@ the magnifier fights a lightbox or a custom gallery.
 | includes/class-sbsk-transfer.php | settings export and import |
 | includes/class-sbsk-docs.php | these notes and the Publishing panel |
 | includes/class-sbsk-convert.php | moves the old sbsk_ options onto the sb_tweaks_site_kit_ names, once |
-| assets/js/admin.js | the module cards, the image tools, the rebuild progress |
+| assets/js/admin.js | the module cards, the image tools, the confirm popup (SBSKConfirm), Image Cleaner's progress box and end of run summary |
+| assets/js/progress.js | SBSKProgress, a copy of SocialBUMP Tweaks' progress popup with busy() added; goes when Site Kit becomes a module |
 
 Every module is includes/modules/<slug>/, with a module.php and one class file
 per job. The ones with more than one file:
@@ -2085,3 +2086,98 @@ close to 665), 1536x1536 and 2048x2048 (1920 covers both).
   default mark, class and notes from the row it copies. Checked against the
   real markup in jsdom: adding a row, adding the defaults, retyping a
   default, removing one and adding again.
+
+## Two thirds size, Reset with WordPress sizes, confirm popups (October 2026)
+
+- DEFAULT_WIDTHS gained 890, for two thirds of a 1330 site: 450, 665, 890,
+  1330, 1920. WordPress's large is a 1024 box, so a portrait image comes out
+  well under 1024 wide; image-890 is width only. Sites with a saved list are
+  untouched; Add default sizes offers 890 there. A site that never saved its
+  Images page reads the defaults from the code and picks it up on update.
+- Reset to default sizes opens a popup. When thumbnail, medium,
+  medium_large or large differ from WordPress's own defaults
+  (SBSK_Images::WP_DEFAULTS: 150 x 150 cropped, 300 x 300, 768, 1024 x 1024),
+  wp_size_drift() lists them in data-wp-drift on the button and the popup
+  shows a tick box over a list of them, one to a line, the size name in
+  bold. Ticked, the form carries sbsk_reset_wp
+  and save() writes WP_DEFAULTS back. Left unticked, WordPress's sizes stay
+  as they are.
+- The Save sizes button under Additional thumbnail sizes is gone: it was a
+  second submit for the same form and lit up for any change on the page. The
+  Settings link stays; Save changes saves everything.
+- Every confirm in Site Kit is now the SocialBUMP popup, the same box as SEO
+  for AI and the SocialBUMP Tweaks hub's confirm popup (dark overlay, 10px
+  radius, 24px padding, title top left, X top right, Cancel left and the
+  action right; Escape, the X and a click outside close it). It lives in
+  admin.js: ask( element, options ) opens it and returns; the action clicks
+  the element again with a one shot pass that confirmed( element ) spends, so
+  each handler carries on unchanged after its check. tell() is the one button
+  version, for the failed Add to library message. window.SBSKConfirm exposes
+  them for scripts printed by module pages (FAQ's Delete content, with the
+  browser's confirm as a fallback). Buttons in PHP pages ask with
+  data-sbsk-confirm (the question, %s for the value of the field named in
+  data-sbsk-confirm-field), data-sbsk-confirm-title and
+  data-sbsk-confirm-action: Remove token and Publish release on Publishing,
+  Import settings on Updates. Styles: .sbsk-modal and .sbsk-dialog in
+  admin.css, copied from .sb-hub__modal and .sb-hub__dialog, without
+  !important.
+- Checked on the hub: the Images page sends the new defaults and an empty
+  drift list, the Save sizes button is gone and Settings stays; with medium
+  and large changed the drift list names both; a real Reset post with the
+  tick put WordPress's sizes back and one without left them; the Publishing,
+  Updates and FAQ pages carry the new attributes or code and load admin.js.
+  The popup itself was run against sample markup in jsdom (Cancel, the
+  action, Escape, the tick, the %s field and the one button version). Not
+  yet seen in a browser. Every option touched was put back.
+
+## Progress and summary popups in the SocialBUMP Tweaks style (October 2026)
+
+The look comes from SocialBUMP Tweaks' popups (its docs, Popups): a white
+box over a dark overlay, 10px radius, 24px padding, the elapsed time small
+and grey top right, a rounded bar in the accent colour, a bold status line,
+Finished over a grey report card (the summary in bold and the time taken).
+
+- Image Cleaner keeps its progress in the box on the page where it always
+  was (#sbsk-progress: bar, status, timer, Cancel, the live per image log,
+  and Stop that run, which only shows while this window is watching a run
+  going in another window and stops that run). Sam tried it as a popup and
+  preferred it on the page. Only the end pops up: finished() writes the last
+  line in the box as before ("Finished. 4 sizes built, 0 files removed. Took
+  6s, 1s per image.") and opens the confirm popup (openModal) with the run's
+  title, Finished or Stopped, the report card, and two buttons: Close, and
+  Scan again, which hides the box and runs a fresh scan. The X, Escape and a
+  click outside close it.
+- openJob( title ) shows the box for a run or for watching another window's,
+  and keeps the title for the summary: Building thumbnails, Rebuilding all
+  thumbnails, Removing old sizes, Deleting orphan images, Deleting missing
+  images, Deleting leftover thumbnails, or the other window's job name.
+  failJob( text ) turns the bar red (.is-failed) and leaves the reason in the
+  box, with no popup. Watching another window ends in the box with Finished
+  in the other window, also with no popup.
+- Find leftover thumbnails' delete used its own bar in its panel. It now
+  runs in the same progress box, honours Cancel, ends with the same summary,
+  and the files left alone plus the rescanned list go back into its panel.
+- openModal() gained body (extra content, here the summary) and cancel (the
+  left button's words, here Close).
+- assets/js/progress.js is a copy of SocialBUMP Tweaks' progress.js as
+  window.SBSKProgress (classes .sbsk-job, __box, __timer, __title, __track,
+  __bar, __count, __current, __report, __summary, __close, the framework's
+  sb-tweaks-job names with Site Kit's prefix), plus busy(): a bar that
+  sweeps when there is no count to show. Only Publish release uses it:
+  data-sbsk-progress and data-sbsk-progress-status on the button open it once
+  the confirm is accepted (and only when the form is valid), and it stays
+  until the page the form posts to loads. Enqueued with admin.js on Site
+  Kit's pages.
+- For the merge into SocialBUMP Tweaks: drop progress.js and the .sbsk-job
+  styles, point data-sbsk-progress at SBTweaksProgress and give that busy().
+  Image Cleaner's box and its summary need nothing from the framework beyond
+  a confirm popup that takes extra content and its own Cancel words.
+- Checked: admin.js passes node --check (the md5 matched the hub copy); in
+  jsdom against the page's markup, with the server's answers stubbed: a
+  build (the box, Cancel while running, the log, the last line, the summary
+  with Close and Scan again), Scan again (box hidden, a new scan sent),
+  closing with Escape and with a click outside, and a failed batch (red bar,
+  reason in the box, no popup). progress.js passes node --check and its
+  busy(), step() and finish() were run in jsdom. On the hub the Image Cleaner
+  page renders the box and loads both scripts, and Publish release carries
+  the attributes. Not yet seen in a browser.

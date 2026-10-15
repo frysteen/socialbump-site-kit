@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.2.2
+Stable tag: 1.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,14 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.2.3 =
+* Images: a two thirds width size, image-890, is now one of the standard sizes (450, 665, 890, 1330 and 1920). It stays 890 wide however tall the image is, unlike WordPress's large. Sites with their own list keep it; Add default sizes adds 890.
+* Images: Reset to default sizes now asks in a popup. When WordPress's own sizes have been changed it lists each one, name in bold, with a tick box to put them back to WordPress's defaults as well.
+* Images: the extra Save sizes button under Additional thumbnail sizes is gone. Save changes saves everything on the page.
+* Site Kit: every confirm now uses the SocialBUMP popup, the same as SEO for AI, instead of the browser's plain box.
+* Image Cleaner: when a build, clear or delete finishes, including Find leftover thumbnails, a summary pops up in the SocialBUMP style: Finished, what was done and how long it took, with Close and Scan again. The progress itself stays where it was on the page.
+* Site Kit: Publish release shows the progress popup while it builds, pushes to GitHub and publishes.
+
 = 1.2.2 =
 * Image Cleaner: leaving the page while a run is going now lets go of it straight away, so the page is not locked when you come back. A window that finds a run going in another window can now stop it with Stop that run; anything already done is kept.
 

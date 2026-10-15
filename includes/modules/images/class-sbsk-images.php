@@ -17,11 +17,53 @@ class SBSK_Images {
 
 	/**
 	 * The standard set, for a 1330 wide site: thirds and quarters (450), halves
-	 * (665), full width (1330) and full width on high density screens (1920).
-	 * With WordPress's 300 and 1024 they make an even srcset ladder. Sites that
-	 * had the old set keep it: see sbsk_keep_old_image_defaults().
+	 * (665), two thirds (890), full width (1330) and full width on high density
+	 * screens (1920). Width only, so a tall image is as wide as a wide one,
+	 * which WordPress's large (a 1024 box) is not. With WordPress's 300 they
+	 * make an even srcset ladder. Sites that had the old set keep it: see
+	 * sbsk_keep_old_image_defaults().
 	 */
-	const DEFAULT_WIDTHS = [ 450, 665, 1330, 1920 ];
+	const DEFAULT_WIDTHS = [ 450, 665, 890, 1330, 1920 ];
+
+	/** WordPress's own size settings as it ships them, for Reset to default sizes. */
+	const WP_DEFAULTS = [
+		'thumbnail_size_w'    => 150,
+		'thumbnail_size_h'    => 150,
+		'thumbnail_crop'      => 1,
+		'medium_size_w'       => 300,
+		'medium_size_h'       => 300,
+		'medium_large_size_w' => 768,
+		'medium_large_size_h' => 0,
+		'large_size_w'        => 1024,
+		'large_size_h'        => 1024,
+	];
+
+	/**
+	 * The WordPress sizes set differently from WordPress's defaults, each as
+	 * "medium 480 x 480 to 300 x 300", for the tick box in the Reset popup.
+	 */
+	public static function wp_size_drift() {
+		$out = [];
+
+		foreach ( [ 'thumbnail', 'medium', 'medium_large', 'large' ] as $name ) {
+			$dw   = self::WP_DEFAULTS[ $name . '_size_w' ];
+			$dh   = self::WP_DEFAULTS[ $name . '_size_h' ];
+			$w    = (int) get_option( $name . '_size_w', $dw );
+			$h    = (int) get_option( $name . '_size_h', $dh );
+			$crop = 'thumbnail' === $name && ! get_option( 'thumbnail_crop', 1 );
+
+			if ( $w === $dw && $h === $dh && ! $crop ) {
+				continue;
+			}
+
+			// medium_large has no height to speak of; its height is 0.
+			$from  = 'medium_large' === $name ? (string) $w : $w . ' x ' . $h;
+			$to    = 'medium_large' === $name ? (string) $dw : $dw . ' x ' . $dh;
+			$out[] = $name . ' ' . $from . ' to ' . $to . ( $crop ? ', cropped' : '' );
+		}
+
+		return $out;
+	}
 
 	public static function boot() {
 		add_action( 'after_setup_theme', [ __CLASS__, 'register_sizes' ] );
@@ -200,6 +242,13 @@ class SBSK_Images {
 
 			update_option( SBSK_Modules::SETTINGS_OPTION, $settings );
 
+			// Ticked in the Reset popup: WordPress's own sizes back to its defaults too.
+			if ( ! empty( $_POST['sbsk_reset_wp'] ) ) {
+				foreach ( self::WP_DEFAULTS as $option => $value ) {
+					update_option( $option, $value );
+				}
+			}
+
 			wp_safe_redirect( admin_url( 'admin.php?page=' . SBSK_Settings::module_page_slug( 'images' ) . '&updated=true' ) );
 			exit;
 		}
@@ -337,7 +386,7 @@ class SBSK_Images {
 		echo '<button type="button" class="button" id="sbsk-add-width">' . esc_html__( 'Add a width', 'sb-site-kit' ) . '</button>';
 		echo '<button type="button" class="button" id="sbsk-add-defaults">' . esc_html__( 'Add default sizes', 'sb-site-kit' ) . '</button>';
 		echo '</span>';
-		echo '<button type="submit" class="button sbsk-button--danger" name="sbsk_reset_sizes" value="1" data-sb-always-on id="sbsk-reset-widths">' . esc_html__( 'Reset to default sizes', 'sb-site-kit' ) . '</button>';
+		echo '<button type="submit" class="button sbsk-button--danger" name="sbsk_reset_sizes" value="1" data-sb-always-on id="sbsk-reset-widths" data-wp-drift="' . esc_attr( wp_json_encode( self::wp_size_drift() ) ) . '">' . esc_html__( 'Reset to default sizes', 'sb-site-kit' ) . '</button>';
 		echo '</div>';
 		echo '</div>';
 
@@ -529,7 +578,6 @@ class SBSK_Images {
 
 		echo '</ul>';
 		echo '<p class="sbsk-othersizes__save">';
-		echo '<button type="submit" class="button">' . esc_html__( 'Save sizes', 'sb-site-kit' ) . '</button>';
 		echo '<a href="' . esc_url( admin_url( 'options-media.php' ) ) . '">' . esc_html__( 'Settings', 'sb-site-kit' ) . '</a>';
 		echo '</p>';
 		echo '</div>';

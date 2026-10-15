@@ -800,6 +800,13 @@ class SBSK_Settings {
 
 		wp_enqueue_script( 'sbsk-admin', SBSK_URL . 'assets/js/admin.js', [ 'jquery' ], $js_ver, true );
 
+		// The progress popup, a copy of SocialBUMP Tweaks' own (SBTweaksProgress).
+		$progress = SBSK_PATH . 'assets/js/progress.js';
+
+		if ( file_exists( $progress ) ) {
+			wp_enqueue_script( 'sbsk-progress', SBSK_URL . 'assets/js/progress.js', [], SBSK_VERSION . '.' . filemtime( $progress ), true );
+		}
+
 		// Shared with the other SocialBUMP plugins: cards that drag and collapse.
 		$cards = SBSK_PATH . 'assets/js/module-cards.js';
 

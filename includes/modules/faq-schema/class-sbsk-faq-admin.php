@@ -509,7 +509,16 @@ class SBSK_FAQ_Admin {
 					+ ( dirty ? 'Your changes on this page will be saved first.\n\n' : '' )
 					+ 'This cannot be undone.';
 
-				if ( ! window.confirm( message ) ) {
+				// The SocialBUMP confirm popup from admin.js, or the browser's own
+				// if that has not loaded.
+				var popup = window.SBSKConfirm;
+
+				if ( popup ) {
+					if ( ! popup.confirmed( this ) ) {
+						popup.ask( this, { title: 'Delete FAQ content', message: message, action: 'Delete' } );
+						return;
+					}
+				} else if ( ! window.confirm( message ) ) {
 					return;
 				}
 

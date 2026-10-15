@@ -782,7 +782,7 @@ class SBSK_Release {
 						<div class="sbsk-release__actions">
 							<button type="submit" class="button button-primary"><?php esc_html_e( 'Save token', 'sb-site-kit' ); ?></button>
 							<?php if ( $token !== '' ) : ?>
-								<button type="submit" name="sbsk_remove_token" value="1" class="button-link button-link-delete" onclick="return confirm('Remove the saved GitHub token?');"><?php esc_html_e( 'Remove token', 'sb-site-kit' ); ?></button>
+								<button type="submit" name="sbsk_remove_token" value="1" class="button-link button-link-delete" data-sbsk-confirm="Remove the saved GitHub token?" data-sbsk-confirm-title="Remove token" data-sbsk-confirm-action="Remove"><?php esc_html_e( 'Remove token', 'sb-site-kit' ); ?></button>
 							<?php endif; ?>
 						</div>
 					</form>
@@ -846,7 +846,7 @@ class SBSK_Release {
 							</p>
 						<?php endif; ?>
 						<div class="sbsk-release__actions">
-							<button type="submit" class="button button-primary" <?php disabled( $token === '' ); ?> onclick="return confirm('Publish version ' + this.form.sbsk_version.value + ' to every site running this plugin?');"><?php esc_html_e( 'Publish release', 'sb-site-kit' ); ?></button>
+							<button type="submit" class="button button-primary" <?php disabled( $token === '' ); ?> data-sbsk-confirm="Publish version %s to every site running this plugin?" data-sbsk-confirm-field="sbsk_version" data-sbsk-confirm-title="Publish release" data-sbsk-confirm-action="Publish" data-sbsk-progress="Publishing" data-sbsk-progress-status="Building, pushing to GitHub and publishing %s"><?php esc_html_e( 'Publish release', 'sb-site-kit' ); ?></button>
 						</div>
 					</form>
 				</div>

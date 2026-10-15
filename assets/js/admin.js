@@ -7,6 +7,145 @@
  */
 ( function ( $ ) {
 	/**
+	 * Confirm popups in the SocialBUMP style, the same box as SEO for AI and the
+	 * SocialBUMP Tweaks hub, instead of the browser's own. A handler that needs a
+	 * yes calls ask( element, options ) and returns. The action clicks the
+	 * element again with a one shot pass that confirmed( element ) spends, so the
+	 * handler carries on as it did after window.confirm().
+	 *
+	 * options: title, message, action (the button's words), check (a tick box
+	 * label), before( checked ) run just ahead of the second click.
+	 */
+	var $sbskModal = null;
+
+	function closeModal() {
+		if ( $sbskModal ) {
+			$sbskModal.remove();
+			$sbskModal = null;
+		}
+
+		$( document ).off( 'keydown.sbskModal' );
+	}
+
+	function openModal( options, onAction ) {
+		closeModal();
+
+		var $modal  = $( '<div class="sbsk-modal"><div class="sbsk-dialog" role="dialog" aria-modal="true"></div></div>' );
+		var $dialog = $modal.children();
+		var $row    = $( '<p class="sbsk-dialog__buttons"></p>' );
+		var $go     = $( '<button type="button" class="button button-primary"></button>' ).text( options.action || 'OK' );
+		var $box    = null;
+
+		$dialog.append( '<button type="button" class="sbsk-dialog__x" aria-label="Close">&times;</button>' );
+		$dialog.append( $( '<h2></h2>' ).text( options.title || '' ) );
+
+		if ( options.message ) {
+			$dialog.append( $( '<p class="sbsk-dialog__message"></p>' ).text( options.message ) );
+		}
+
+		// body: anything else to show, such as a run's summary.
+		if ( options.body ) {
+			$dialog.append( options.body );
+		}
+
+		// check is the tick box: its words, or { label, list } for words over a
+		// list, each line's first word (a size name, say) in bold.
+		if ( options.check ) {
+			var check  = 'string' === typeof options.check ? { label: options.check } : options.check;
+			var $label = $( '<label class="sbsk-dialog__check"><input type="checkbox"><span></span></label>' );
+			var $words = $label.find( 'span' );
+
+			$words.text( check.label || '' );
+
+			if ( check.list && check.list.length ) {
+				var $list = $( '<ul class="sbsk-dialog__list"></ul>' );
+
+				check.list.forEach( function ( line ) {
+					var text  = String( line );
+					var at    = text.indexOf( ' ' );
+					var $item = $( '<li></li>' );
+
+					if ( at > 0 ) {
+						$item.append( $( '<strong></strong>' ).text( text.slice( 0, at ) ), document.createTextNode( text.slice( at ) ) );
+					} else {
+						$item.text( text );
+					}
+
+					$list.append( $item );
+				} );
+
+				$words.append( $list );
+			}
+
+			$box = $label.find( 'input' );
+			$dialog.append( $label );
+		}
+
+		if ( ! options.alert ) {
+			$row.append( $( '<button type="button" class="button sbsk-dialog__cancel"></button>' ).text( options.cancel || 'Cancel' ) );
+		}
+
+		$row.append( $go );
+		$dialog.append( $row );
+
+		// A click on the dark area closes it, as do the X, Cancel and Escape.
+		$modal.on( 'click', function ( e ) {
+			if ( e.target === this ) {
+				closeModal();
+			}
+		} );
+
+		$dialog.on( 'click', '.sbsk-dialog__x, .sbsk-dialog__cancel', closeModal );
+
+		$go.on( 'click', function () {
+			var checked = $box ? $box.prop( 'checked' ) : false;
+
+			closeModal();
+
+			if ( onAction ) {
+				onAction( checked );
+			}
+		} );
+
+		$( document ).on( 'keydown.sbskModal', function ( e ) {
+			if ( e.key === 'Escape' ) {
+				closeModal();
+			}
+		} );
+
+		$( document.body ).append( $modal );
+		$sbskModal = $modal;
+		$go.trigger( 'focus' );
+	}
+
+	function confirmed( element ) {
+		if ( element && element.sbskPass ) {
+			element.sbskPass = false;
+
+			return true;
+		}
+
+		return false;
+	}
+
+	function ask( element, options ) {
+		openModal( options, function ( checked ) {
+			if ( options.before ) {
+				options.before( checked );
+			}
+
+			element.sbskPass = true;
+			$( element ).trigger( 'click' );
+		} );
+	}
+
+	function tell( options ) {
+		openModal( $.extend( { action: 'OK', alert: true }, options ) );
+	}
+
+	// For scripts printed by the modules' own pages.
+	window.SBSKConfirm = { ask: ask, confirmed: confirmed, tell: tell };
+	/**
 	 * Resolve any CSS colour (hex, rgb, hsl, var) to a hex, or null if it can't be.
 	 * A variable that isn't defined here inherits the sentinel colour, so it's caught.
 	 */
@@ -219,6 +358,24 @@
 			var lastOrphans = 0;
 			var nonce   = $rebuild.data( 'nonce' );
 
+			// Which run is going, for the title of the summary that pops up at the end.
+			var jobTitle = '';
+
+			/** Show the progress box for a new run, or for watching another window's. */
+			function openJob( title ) {
+				jobTitle = title;
+				$progress.removeClass( 'is-done is-failed' ).prop( 'hidden', false );
+				$( '#sbsk-progress-log' ).empty();
+				$bar.css( 'width', '0%' );
+			}
+
+			/** Stop where it is, the bar red, with the reason. */
+			function failJob( text ) {
+				stopClock();
+				$progress.addClass( 'is-failed' );
+				$status.text( text );
+			}
+
 			/**
 			 * One token per run. The server holds a site wide lock while a long job
 			 * runs and refuses requests from any window without that token,
@@ -392,7 +549,7 @@
 			function paintWatch( busy ) {
 				var total = busy.total || 0;
 				var done  = Math.min( busy.done || 0, total );
-				var line  = busy.label + ' in another window, started by ' + busy.user + '. ';
+				var line  = 'In another window, started by ' + busy.user + '. ';
 
 				$bar.css( 'width', ( total ? Math.round( ( done / total ) * 100 ) : 0 ) + '%' );
 				$status.text( line + ( total ? done + ' of ' + total + '. ' + ( busy.current || '' ) : 'Starting...' ) );
@@ -411,6 +568,7 @@
 					window.clearInterval( watching );
 					watching = null;
 					$bar.css( 'width', '100%' );
+					$progress.addClass( 'is-done' );
 					$status.text( 'Finished in the other window.' );
 					$takeover.prop( 'hidden', true );
 					$close.prop( 'hidden', false );
@@ -420,8 +578,7 @@
 
 			function watch( busy ) {
 				buttons( false );
-				$progress.prop( 'hidden', false );
-				$( '#sbsk-progress-log' ).empty();
+				openJob( busy.label );
 				window.clearInterval( ticking );
 				ticking = null;
 				$cancel.prop( 'hidden', true );
@@ -437,7 +594,8 @@
 			// Stops the run another window holds, or one left behind by a page that
 			// was closed part way. Anything it has done already stays done.
 			$takeover.on( 'click', function () {
-				if ( ! window.confirm( 'Stop the run in the other window? Anything it has already done is kept.' ) ) {
+				if ( ! confirmed( this ) ) {
+					ask( this, { title: 'Stop that run', message: 'Stop the run in the other window? Anything it has already done is kept.', action: 'Stop it' } );
 					return;
 				}
 
@@ -452,6 +610,7 @@
 					window.clearInterval( watching );
 					watching = null;
 					$takeover.prop( 'hidden', true );
+					$progress.addClass( 'is-done' );
 					$status.text( 'Stopped. Anything it had already done has been kept.' );
 					$close.prop( 'hidden', false );
 					buttons( true );
@@ -467,10 +626,47 @@
 				$status.text( 'Stopping after this batch...' );
 			} );
 
+			/** How long a run took, as the summary says it: 42 seconds, 3 minutes 5 seconds. */
+			function spoken( seconds ) {
+				if ( seconds < 60 ) {
+					return seconds + ( seconds === 1 ? ' second' : ' seconds' );
+				}
+
+				var m = Math.floor( seconds / 60 );
+				var s = seconds % 60;
+
+				return m + ( m === 1 ? ' minute ' : ' minutes ' ) + s + ( s === 1 ? ' second' : ' seconds' );
+			}
+
+			/**
+			 * The end of a run. The progress box keeps its last line, as it always
+			 * has, and a summary pops up: Finished or Stopped, the summary in bold
+			 * with the time it took, Close, and Scan again for a fresh scan. The X,
+			 * Escape and a click outside close it too.
+			 */
 			function finished( text ) {
+				var parts   = /^(Finished|Stopped)\.\s*(.*)$/.exec( text );
+				var seconds = elapsed();
+				var rate    = seenNow > 0 && seconds > 0 ? ', ' + ( Math.round( ( seconds / seenNow ) * 100 ) / 100 ) + 's per image' : '';
+				var $body   = $( '<div class="sbsk-summary"></div>' );
+				var $line   = $( '<p class="sbsk-job__summary"></p>' );
+
 				stopClock();
-				$status.text( text + ' Took ' + spell( elapsed() ) + ( seenNow > 0 ? ', ' + ( Math.round( ( elapsed() / seenNow ) * 100 ) / 100 ) + 's per image.' : '.' ) );
+
+				if ( ! parts || 'Finished' === parts[1] ) {
+					$bar.css( 'width', '100%' );
+				}
+
+				$status.text( text + ' Took ' + spell( seconds ) + rate + '.' );
 				$cancel.prop( 'disabled', false );
+
+				$line.append( $( '<strong></strong>' ).text( ( parts ? parts[2] : text ).replace( /\.$/, '' ) ), document.createTextNode( ' in ' + spoken( seconds ) + rate + '.' ) );
+				$body.append( $( '<p class="sbsk-summary__head"></p>' ).text( parts ? parts[1] : 'Finished' ), $( '<div class="sbsk-job__report"></div>' ).append( $line ) );
+
+				openModal( { title: jobTitle || 'Finished', body: $body, cancel: 'Close', action: 'Scan again' }, function () {
+					$progress.prop( 'hidden', true );
+					scan( false );
+				} );
 			}
 
 			function batch( offset, total, force, mode, sizes ) {
@@ -494,7 +690,7 @@
 						}
 
 						releaseJob();
-						$status.text( 'Something went wrong. Try again.' );
+						failJob( 'Something went wrong. Try again.' );
 						buttons( true );
 						return;
 					}
@@ -584,7 +780,7 @@
 
 					stopClock();
 					releaseJob();
-					$status.text( 'The server did not answer. Anything already built has been kept, so you can start again from here.' );
+					failJob( 'The server did not answer. Anything already built has been kept, so you can start again from here.' );
 					buttons( true );
 				} );
 			}
@@ -594,10 +790,8 @@
 				newJob();
 
 				buttons( false );
-				$progress.prop( 'hidden', false );
-				$bar.css( 'width', '0%' );
+				openJob( force ? 'Rebuilding all thumbnails' : ( 'clean' === mode ? 'Removing old sizes' : 'Building thumbnails' ) );
 				$status.text( 'Working...' );
-				$( '#sbsk-progress-log' ).empty();
 				startClock();
 
 				$.post( ajaxurl, { action: 'sbsk_images_count', nonce: nonce, job: jobToken, mode: mode, force: force ? 1 : 0 } ).done( function ( response ) {
@@ -615,6 +809,7 @@
 					if ( ! total ) {
 						stopClock();
 						releaseJob();
+						$progress.addClass( 'is-done' );
 						$status.text( 'No images found.' );
 						buttons( true );
 						return;
@@ -740,31 +935,40 @@
 					return;
 				}
 
-				if ( ! window.confirm( 'Delete ' + files + ' file' + ( files === 1 ? '' : 's' ) + ' at ' + dims.length + ' size' + ( dims.length === 1 ? '' : 's' ) + '? This cannot be undone.' ) ) {
+				if ( ! confirmed( this ) ) {
+					ask( this, { title: 'Delete leftover thumbnails', message: 'Delete ' + files + ' file' + ( files === 1 ? '' : 's' ) + ' at ' + dims.length + ' size' + ( dims.length === 1 ? '' : 's' ) + '? This cannot be undone.', action: 'Delete' } );
 					return;
 				}
 
 				var removed = 0;
 				var freed   = 0;
 				var skipped = [];
-				var began   = Date.now();
 
-				// The same clock the rebuild keeps, so a long delete reads the same way.
-				function took() {
-					return Math.max( 0, Math.round( ( Date.now() - began ) / 1000 ) );
+				// The same progress popup as the rebuild.
+				buttons( false );
+				openJob( 'Deleting leftover thumbnails' );
+				$status.text( 'Deleting...' );
+				startClock();
+
+				// The files left alone, kept in the panel once the popup is closed.
+				function leftAlone() {
+					if ( ! skipped.length ) {
+						return '';
+					}
+
+					var note = '<div class="sbsk-deep__skipped"><p>' + skipped.length + ' file' + ( skipped.length === 1 ? ' was' : 's were' ) + ' left alone:</p><ul>';
+
+					skipped.slice( 0, 20 ).forEach( function ( skip ) {
+						// why_html is built and escaped server side, and carries the edit links.
+						note += '<li><code>' + $( '<span>' ).text( skip.name ).html() + '</code> <span>' + ( skip.why_html || $( '<span>' ).text( skip.why ).html() ) + '</span></li>';
+					} );
+
+					if ( skipped.length > 20 ) {
+						note += '<li class="sbsk-deep__more">and ' + ( skipped.length - 20 ) + ' more</li>';
+					}
+
+					return note + '</ul></div>';
 				}
-
-				function spellTook( seconds ) {
-					return seconds < 60 ? seconds + 's' : Math.floor( seconds / 60 ) + 'm ' + ( seconds % 60 ) + 's';
-				}
-
-				function each( done ) {
-					return done > 0 && took() > 0 ? ', ' + ( Math.round( ( took() / done ) * 100 ) / 100 ) + 's per file' : '';
-				}
-
-				// The same bar the rebuild uses, so a long delete looks like work rather
-				// than a stuck line of text.
-				$deep.html( '<div class="sbsk-rebuild__bar sbsk-deep__bar"><span></span></div><p class="sbsk-deep__working">Deleting...</p>' );
 
 				/**
 				 * One batch per request, so a big clean-up never sits in one call
@@ -784,14 +988,16 @@
 
 						if ( stoppedIn( response ) ) {
 							jobToken = '';
-							$deep.html( '<p class="sbsk-deep__working">Stopped from another window. ' + removed + ' files had already been removed.</p>' );
+							stopClock();
+							$status.text( 'Stopped from another window. ' + removed + ' files had already been removed.' );
+							buttons( true );
 							return;
 						}
 
 						if ( ! response || ! response.success ) {
 							releaseJob();
-							$deep.html( '<p class="sbsk-deep__working">Something went wrong. ' + removed + ' files had already been removed.</p>' );
-
+							failJob( 'Something went wrong. ' + removed + ' files had already been removed.' );
+							buttons( true );
 							return;
 						}
 
@@ -801,40 +1007,33 @@
 						freed   += data.bytes;
 						skipped  = skipped.concat( data.skipped || [] );
 
-						if ( ! data.done ) {
-							var seen = Math.min( removed + skipped.length, data.total || files );
+						var seen = Math.min( removed + skipped.length, data.total || files );
 
-							$deep.find( '.sbsk-deep__bar span' ).css( 'width', ( data.total ? Math.round( ( seen / data.total ) * 100 ) : 0 ) + '%' );
-							$deep.find( '.sbsk-deep__working' ).text( 'Deleting... ' + removed + ' of ' + files + ' removed. ' + spellTook( took() ) + each( removed ) );
+						seenNow = removed;
+						paintTimer();
+						$bar.css( 'width', ( data.total ? Math.round( ( seen / data.total ) * 100 ) : 0 ) + '%' );
+						$status.text( removed + ' of ' + files + ' removed.' );
+
+						if ( ! data.done && ! stopped ) {
 							batch( data.offset );
-
 							return;
 						}
 
-						var note = '<p class="sbsk-deep__working">Removed ' + removed + ' file' + ( removed === 1 ? '' : 's' ) + ', ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed. Took ' + spellTook( took() ) + each( removed ) + '.</p>';
+						finished( ( data.done ? 'Finished. ' : 'Stopped. ' ) + removed + ' file' + ( removed === 1 ? '' : 's' ) + ' removed, ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed.' );
 
-						if ( skipped.length ) {
-							note += '<div class="sbsk-deep__skipped"><p>' + skipped.length + ' file' + ( skipped.length === 1 ? ' was' : 's were' ) + ' left alone:</p><ul>';
-
-							skipped.slice( 0, 20 ).forEach( function ( skip ) {
-								// why_html is built and escaped server side, and carries the edit links.
-								note += '<li><code>' + $( '<span>' ).text( skip.name ).html() + '</code> <span>' + ( skip.why_html || $( '<span>' ).text( skip.why ).html() ) + '</span></li>';
-							} );
-
-							if ( skipped.length > 20 ) {
-								note += '<li class="sbsk-deep__more">and ' + ( skipped.length - 20 ) + ' more</li>';
-							}
-
-							note += '</ul></div>';
+						if ( data.html ) {
+							$deep.html( leftAlone() + data.html );
+							deepButtons();
+						} else {
+							$deep.html( leftAlone() );
 						}
 
-						$deep.html( note + data.html );
-						deepButtons();
 						scan( true );
 						releaseJob();
 					} ).fail( function () {
 						releaseJob();
-						$deep.html( '<p class="sbsk-deep__working">The server did not answer. ' + removed + ' files had already been removed.</p>' );
+						failJob( 'The server did not answer. ' + removed + ' files had already been removed.' );
+						buttons( true );
 					} );
 				}
 
@@ -932,7 +1131,7 @@
 					}
 
 					$button.prop( 'disabled', false ).text( 'Add to library' );
-					window.alert( ( response && response.data && response.data.message ) || 'That file could not be added.' );
+					tell( { title: 'Not added', message: ( response && response.data && response.data.message ) || 'That file could not be added.' } );
 				} ).fail( function () {
 					$button.prop( 'disabled', false ).text( 'Add to library' );
 				} );
@@ -942,7 +1141,8 @@
 				var $button = $( this );
 				var file    = $button.data( 'file' );
 
-				if ( ! window.confirm( 'Delete ' + file + '? This cannot be undone.' ) ) {
+				if ( ! confirmed( this ) ) {
+					ask( this, { title: 'Delete file', message: 'Delete ' + file + '? This cannot be undone.', action: 'Delete' } );
 					return;
 				}
 
@@ -991,7 +1191,7 @@
 						}
 
 						releaseJob();
-						$status.text( 'Something went wrong. ' + deleted + ' had already been deleted.' );
+						failJob( 'Something went wrong. ' + deleted + ' had already been deleted.' );
 						buttons( true );
 						return;
 					}
@@ -1017,7 +1217,7 @@
 				} ).fail( function () {
 					stopClock();
 					releaseJob();
-					$status.text( 'The server did not answer. ' + deleted + ' had already been deleted.' );
+					failJob( 'The server did not answer. ' + deleted + ' had already been deleted.' );
 					buttons( true );
 				} );
 			}
@@ -1029,14 +1229,13 @@
 					return;
 				}
 
-				if ( ! window.confirm( 'Delete ' + ids.length + ' missing image' + ( ids.length === 1 ? '' : 's' ) + ' from the Media Library? Pages using them lose them. This cannot be undone.' ) ) {
+				if ( ! confirmed( this ) ) {
+					ask( this, { title: 'Delete missing images', message: 'Delete ' + ids.length + ' missing image' + ( ids.length === 1 ? '' : 's' ) + ' from the Media Library? Pages using them lose them. This cannot be undone.', action: 'Delete' } );
 					return;
 				}
 
 				buttons( false );
-				$progress.prop( 'hidden', false );
-				$( '#sbsk-progress-log' ).empty();
-				$bar.css( 'width', '0%' );
+				openJob( 'Deleting missing images' );
 				$status.text( 'Deleting...' );
 				startClock();
 				newJob();
@@ -1056,7 +1255,8 @@
 			$build.on( 'click', function () {
 				var force = $( '#sbsk-rebuild-force' ).prop( 'checked' );
 
-				if ( force && ! window.confirm( 'Rebuild the ' + savedCount + ' saved size' + ( savedCount === 1 ? '' : 's' ) + ' on every image? This replaces files that already exist.' ) ) {
+				if ( force && ! confirmed( this ) ) {
+					ask( this, { title: 'Rebuild every image', message: 'Rebuild the ' + savedCount + ' saved size' + ( savedCount === 1 ? '' : 's' ) + ' on every image? This replaces files that already exist.', action: 'Rebuild' } );
 					return;
 				}
 
@@ -1064,7 +1264,8 @@
 			} );
 
 			$clean.on( 'click', function () {
-				if ( ! window.confirm( 'Remove the thumbnails left over from sizes you have taken off the list?' ) ) {
+				if ( ! confirmed( this ) ) {
+					ask( this, { title: 'Remove old thumbnails', message: 'Remove the thumbnails left over from sizes you have taken off the list?', action: 'Remove' } );
 					return;
 				}
 
@@ -1090,7 +1291,7 @@
 						}
 
 						releaseJob();
-						$status.text( 'Something went wrong. Nothing else was changed.' );
+						failJob( 'Something went wrong. Nothing else was changed.' );
 						buttons( true );
 						return;
 					}
@@ -1121,20 +1322,19 @@
 				} ).fail( function () {
 					stopClock();
 					releaseJob();
-					$status.text( 'The server did not answer. Nothing else was changed, and what was already removed has gone.' );
+					failJob( 'The server did not answer. Nothing else was changed, and what was already removed has gone.' );
 					buttons( true );
 				} );
 			}
 
 			$orphan.on( 'click', function () {
-				if ( ! window.confirm( 'Confirm you want to delete ' + lastOrphans + ' orphaned image' + ( lastOrphans === 1 ? '' : 's' ) + '. This cannot be undone.' ) ) {
+				if ( ! confirmed( this ) ) {
+					ask( this, { title: 'Delete orphaned images', message: 'Delete ' + lastOrphans + ' orphaned image' + ( lastOrphans === 1 ? '' : 's' ) + '? This cannot be undone.', action: 'Delete' } );
 					return;
 				}
 
 				buttons( false );
-				$progress.prop( 'hidden', false );
-				$( '#sbsk-progress-log' ).empty();
-				$bar.css( 'width', '0%' );
+				openJob( 'Deleting orphan images' );
 				$status.text( 'Clearing...' );
 				startClock();
 				newJob();
@@ -1212,10 +1412,68 @@
 			} );
 		}
 
+		// Reset asks first. When WordPress's own sizes are set differently from
+		// its defaults, the popup offers to put those back as well.
 		$( '#sbsk-reset-widths' ).on( 'click', function ( e ) {
-			if ( ! window.confirm( 'Put the standard image sizes back, and switch off medium_large, 1536x1536 and 2048x2048? Any widths you have added or changed will be lost.' ) ) {
-				e.preventDefault();
+			if ( confirmed( this ) ) {
+				return;
 			}
+
+			e.preventDefault();
+
+			var $form  = $( this.form );
+			var widths = ( $( '#sbsk-widths' ).data( 'defaults' ) || [] ).join( ', ' ).replace( /, ([^,]*)$/, ' and $1' );
+			var drift  = $( this ).data( 'wp-drift' ) || [];
+
+			ask( this, {
+				title: 'Reset to default sizes',
+				message: 'Put the standard image sizes back (' + widths + '), and switch off medium_large, 1536x1536 and 2048x2048? Any widths you have added or changed will be lost.',
+				check: drift.length ? { label: 'Also put the WordPress sizes back to their defaults:', list: drift } : '',
+				action: 'Reset',
+				before: function ( checked ) {
+					$form.find( 'input[name="sbsk_reset_wp"]' ).remove();
+
+					if ( checked ) {
+						$form.append( '<input type="hidden" name="sbsk_reset_wp" value="1">' );
+					}
+				}
+			} );
+		} );
+
+		// Buttons that ask first: data-sbsk-confirm holds the question, with %s
+		// standing for the value of the field named in data-sbsk-confirm-field.
+		// data-sbsk-progress opens the progress popup once it is confirmed, for a
+		// long post such as Publish release; it stays until the next page loads.
+		$( document ).on( 'click', '[data-sbsk-confirm]', function ( e ) {
+			if ( confirmed( this ) ) {
+				return;
+			}
+
+			e.preventDefault();
+
+			var button  = this;
+			var $button = $( button );
+			var field   = $button.data( 'sbsk-confirm-field' );
+			var value   = field && button.form && button.form.elements[ field ] ? button.form.elements[ field ].value : '';
+
+			ask( button, {
+				title: $button.data( 'sbsk-confirm-title' ) || $.trim( $button.text() ),
+				message: String( $button.data( 'sbsk-confirm' ) ).replace( '%s', value ),
+				action: $button.data( 'sbsk-confirm-action' ) || $.trim( $button.text() ),
+				before: function () {
+					var title = $button.data( 'sbsk-progress' );
+
+					// Not when the form will refuse to send, or the popup would never go.
+					if ( ! title || ! window.SBSKProgress || ( button.form && ! button.form.checkValidity() ) ) {
+						return;
+					}
+
+					var job = window.SBSKProgress.open( title );
+
+					job.busy();
+					job.status( String( $button.data( 'sbsk-progress-status' ) || '' ).replace( '%s', value ) );
+				}
+			} );
 		} );
 
 		$( '.sbsk-card .sbsk-switch input' ).on( 'change', function () {

@@ -151,7 +151,7 @@ class SBSK_Transfer {
 		echo '<input type="hidden" name="action" value="sbsk_import_settings">';
 		wp_nonce_field( 'sbsk_import_settings' );
 		echo '<p><input type="file" name="sbsk_settings_file" accept="application/json,.json" required></p>';
-		echo '<p><button type="submit" class="button" onclick="return confirm(&#39;Replace the Site Kit settings on this site?&#39;);">' . esc_html__( 'Import settings', 'sb-site-kit' ) . '</button></p>';
+		echo '<p><button type="submit" class="button" data-sbsk-confirm="Replace the Site Kit settings on this site?" data-sbsk-confirm-title="Import settings" data-sbsk-confirm-action="Import">' . esc_html__( 'Import settings', 'sb-site-kit' ) . '</button></p>';
 		echo '</form></div>';
 
 		echo '</div></section>';
