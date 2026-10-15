@@ -31,6 +31,7 @@ class SBSK_Images_Tools {
 		add_action( 'wp_ajax_sbsk_images_gone_delete', [ __CLASS__, 'ajax_gone_delete' ] );
 		add_action( 'wp_ajax_sbsk_images_orphan_add', [ __CLASS__, 'ajax_orphan_add' ] );
 		add_action( 'wp_ajax_sbsk_images_release', [ __CLASS__, 'ajax_release' ] );
+		add_action( 'wp_ajax_sbsk_images_stop', [ __CLASS__, 'ajax_stop' ] );
 		add_filter( 'attachment_fields_to_edit', [ __CLASS__, 'attachment_field' ], 20, 2 );
 		add_action( 'add_meta_boxes_attachment', [ __CLASS__, 'meta_box' ] );
 	}
@@ -55,6 +56,22 @@ class SBSK_Images_Tools {
 	/** Seconds with no batch before a job counts as abandoned, a closed window say. */
 	const JOB_LAPSE = 150;
 
+	/**
+	 * Prefix for a run token that has been stopped, from another window or by
+	 * its own page closing. Its requests are refused from then on, and a batch
+	 * already running cannot take the lock back when it finishes.
+	 */
+	const STOPPED = 'sbsk_images_stopped_';
+
+	private static function is_stopped( $token ) {
+		return $token !== '' && (bool) get_transient( self::STOPPED . $token );
+	}
+
+	private static function mark_stopped( $token ) {
+		if ( $token !== '' ) {
+			set_transient( self::STOPPED . $token, 1, 10 * MINUTE_IN_SECONDS );
+		}
+	}
 	private static function job_token() {
 		return isset( $_POST['job'] ) ? substr( sanitize_key( wp_unslash( $_POST['job'] ) ), 0, 40 ) : '';
 	}
@@ -67,6 +84,10 @@ class SBSK_Images_Tools {
 
 	/** Refuse the request when another window's job holds the lock. */
 	private static function job_gate() {
+		if ( self::is_stopped( self::job_token() ) ) {
+			wp_send_json_error( [ 'stopped' => true ] );
+		}
+
 		$job = self::job();
 
 		if ( $job && $job['token'] !== self::job_token() ) {
@@ -91,7 +112,7 @@ class SBSK_Images_Tools {
 	private static function job_beat( $kind, $done = null, $total = null, $current = null ) {
 		$token = self::job_token();
 
-		if ( $token === '' ) {
+		if ( $token === '' || self::is_stopped( $token ) ) {
 			return;
 		}
 
@@ -166,8 +187,32 @@ class SBSK_Images_Tools {
 	}
 
 	/** A run that was cancelled or failed lets go of the lock straight away. */
+	/**
+	 * Stop the run another window holds, or one left behind by a page closed
+	 * part way. Anything it has done stays done.
+	 */
+	public static function ajax_stop() {
+		self::guard();
+
+		$job = self::job();
+
+		if ( $job ) {
+			self::mark_stopped( (string) $job['token'] );
+			delete_transient( self::JOB );
+		}
+
+		wp_send_json_success();
+	}
+
 	public static function ajax_release() {
 		self::guard();
+
+		// Sent as the page closes, so a batch still running for it cannot take
+		// the lock back when it finishes.
+		if ( ! empty( $_POST['leaving'] ) ) {
+			self::mark_stopped( self::job_token() );
+		}
+
 		self::job_end();
 		wp_send_json_success();
 	}

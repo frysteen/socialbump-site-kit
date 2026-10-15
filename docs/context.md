@@ -859,6 +859,7 @@ are the three rules worth reading before you touch it.
 | sb_tweaks_site_kit_adopted_image_sizes | removed sizes from other sources that someone chose to clear on the Image Cleaner page |
 | sb_tweaks_site_kit_media_grid (user meta) | each user's thumbnail size and fit, used in the Media Library grid and the media pop-up |
 | sbsk_images_run_<user>_<mode>, sbsk_orphans_run_<user> (transients) | the id or path list held for a run, one per tool so a build and a clean never share a list. Ten minutes; the images list is renewed each time a batch reads it, so a long run keeps it |
+| sbsk_images_stopped_<token> (transient) | a run token that was stopped from another window or by its page closing, ten minutes, so its requests are refused |
 | sbsk_images_job (transient) | the Image Cleaner job running now: token, kind, who started it, when, and its counts. Renewed by each batch and gone 150 seconds after the last, so a closed window frees it |
 | socialbump_cards (user meta) | each user's card order and collapsed cards, per page key |
 | sbsk_github_token | encrypted, hub only, and deleted on any site that is not the hub |
@@ -1852,6 +1853,28 @@ would have reset the list under the first and it would have skipped images.
   those HTTP calls returned stale values from that request's cache, so check
   through the status call or a fresh request.
 
+
+Stopping a run, and leaving the page (October 2026). A run left behind by a
+page closed part way through held the lock until it lapsed, 150 seconds after
+its last batch, and no window could stop it.
+
+- pagehide sends sbsk_images_release by navigator.sendBeacon with leaving=1.
+  The token is marked stopped (transient sbsk_images_stopped_<token>, ten
+  minutes) as well as the lock let go, because the batch still running on the
+  server would otherwise take the lock back through job_beat when it
+  finished. A normal release does not mark the token: the quiet scan at the
+  end of a run is sent with it and may arrive after the release.
+- job_beat never claims the lock for a stopped token, and job_gate turns its
+  requests away with { stopped: true }.
+- A window watching another run shows Stop that run (#sbsk-progress-takeover)
+  in the progress box. sbsk_images_stop (upload_files and the sbsk_images
+  nonce, like the rest) marks the holder's token stopped and deletes the lock.
+  The window that was running sees stopped on its next request and says it
+  was stopped from another window; what it had done stays done.
+- Checked through admin-ajax on the hub with a temporary session: stopping a
+  held lock, the old token turned away, a late beat after a leaving release
+  not taking the lock back, and a normal release leaving no mark. The pagehide
+  beacon and the button were not tried in a browser.
 ## Missing images (October 2026)
 
 Found on Villa: 7 library images had no file on disk at all, not the original

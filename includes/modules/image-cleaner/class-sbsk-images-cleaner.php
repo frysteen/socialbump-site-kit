@@ -239,6 +239,7 @@ class SBSK_Images_Cleaner {
 		echo '<div class="sbsk-progress" id="sbsk-progress" hidden>';
 		echo '<button type="button" class="sbsk-progress__close" id="sbsk-progress-close" aria-label="' . esc_attr__( 'Hide progress', 'sb-site-kit' ) . '">&times;</button>';
 		echo '<button type="button" class="sbsk-progress__cancel" id="sbsk-progress-cancel" hidden>' . esc_html__( 'Cancel', 'sb-site-kit' ) . '</button>';
+		echo '<button type="button" class="sbsk-progress__cancel" id="sbsk-progress-takeover" hidden>' . esc_html__( 'Stop that run', 'sb-site-kit' ) . '</button>';
 		echo '<div class="sbsk-rebuild__bar" id="sbsk-rebuild-bar"><span></span></div>';
 		echo '<div class="sbsk-progress__line">';
 		echo '<p class="sbsk-rebuild__status" role="status"></p>';

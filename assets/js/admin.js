@@ -238,6 +238,31 @@
 				jobToken = '';
 			}
 
+			/** This window's run was stopped from another window. */
+			function stoppedIn( response ) {
+				return !! ( response && ! response.success && response.data && response.data.stopped );
+			}
+
+			/**
+			 * Leaving the page ends the run, so the lock is let go of straight away
+			 * instead of shutting out other windows, or this one come back to, until
+			 * it lapses. leaving also stops a batch still running on the server from
+			 * taking the lock back when it finishes.
+			 */
+			window.addEventListener( 'pagehide', function () {
+				if ( ! jobToken || ! navigator.sendBeacon ) {
+					return;
+				}
+
+				var data = new FormData();
+
+				data.append( 'action', 'sbsk_images_release' );
+				data.append( 'nonce', nonce );
+				data.append( 'job', jobToken );
+				data.append( 'leaving', '1' );
+				navigator.sendBeacon( ajaxurl, data );
+			} );
+
 			/** The job another window is running, when the server refused for that reason. */
 			function busyIn( response ) {
 				return response && ! response.success && response.data && response.data.busy ? response.data.busy : null;
@@ -246,7 +271,7 @@
 			function buttons( on ) {
 				// Not the progress box's own controls: Cancel has to stay clickable while
 				// a run is going, which is the only time it is on screen.
-				$rebuild.find( 'button' ).not( '#sbsk-progress-cancel, #sbsk-progress-close' ).prop( 'disabled', ! on );
+				$rebuild.find( 'button' ).not( '#sbsk-progress-cancel, #sbsk-progress-close, #sbsk-progress-takeover' ).prop( 'disabled', ! on );
 
 				if ( on ) {
 					refreshBuild();
@@ -305,6 +330,7 @@
 			var $timer  = $( '#sbsk-progress-timer' );
 			var $cancel = $( '#sbsk-progress-cancel' );
 			var $close  = $( '#sbsk-progress-close' );
+			var $takeover = $( '#sbsk-progress-takeover' );
 			var started = 0;
 			var ticking = null;
 			var seenNow = 0;
@@ -386,6 +412,7 @@
 					watching = null;
 					$bar.css( 'width', '100%' );
 					$status.text( 'Finished in the other window.' );
+					$takeover.prop( 'hidden', true );
 					$close.prop( 'hidden', false );
 					buttons( true );
 				} );
@@ -399,12 +426,39 @@
 				ticking = null;
 				$cancel.prop( 'hidden', true );
 				$close.prop( 'hidden', true );
+				$takeover.prop( { hidden: false, disabled: false } );
 				paintWatch( busy );
 
 				if ( ! watching ) {
 					watching = window.setInterval( pollWatch, 3000 );
 				}
 			}
+
+			// Stops the run another window holds, or one left behind by a page that
+			// was closed part way. Anything it has done already stays done.
+			$takeover.on( 'click', function () {
+				if ( ! window.confirm( 'Stop the run in the other window? Anything it has already done is kept.' ) ) {
+					return;
+				}
+
+				$takeover.prop( 'disabled', true );
+
+				$.post( ajaxurl, { action: 'sbsk_images_stop', nonce: nonce } ).done( function ( response ) {
+					if ( ! response || ! response.success ) {
+						$takeover.prop( 'disabled', false );
+						return;
+					}
+
+					window.clearInterval( watching );
+					watching = null;
+					$takeover.prop( 'hidden', true );
+					$status.text( 'Stopped. Anything it had already done has been kept.' );
+					$close.prop( 'hidden', false );
+					buttons( true );
+				} ).fail( function () {
+					$takeover.prop( 'disabled', false );
+				} );
+			} );
 
 			$cancel.on( 'click', function () {
 				// The batch in flight finishes; nothing after it is asked for.
@@ -423,6 +477,13 @@
 				$.post( ajaxurl, { action: 'sbsk_images_batch', nonce: nonce, job: jobToken, offset: offset, force: force ? 1 : 0, mode: mode, sizes: sizes || [], batch: ( retried || force ) ? 1 : 5 } ).done( function ( response ) {
 					if ( ! response || ! response.success ) {
 						stopClock();
+
+						if ( stoppedIn( response ) ) {
+							jobToken = '';
+							$status.text( 'Stopped from another window. Anything already done has been kept.' );
+							buttons( true );
+							return;
+						}
 
 						var busy = busyIn( response );
 
@@ -721,6 +782,12 @@
 							return;
 						}
 
+						if ( stoppedIn( response ) ) {
+							jobToken = '';
+							$deep.html( '<p class="sbsk-deep__working">Stopped from another window. ' + removed + ' files had already been removed.</p>' );
+							return;
+						}
+
 						if ( ! response || ! response.success ) {
 							releaseJob();
 							$deep.html( '<p class="sbsk-deep__working">Something went wrong. ' + removed + ' files had already been removed.</p>' );
@@ -910,6 +977,13 @@
 					if ( ! response || ! response.success ) {
 						stopClock();
 
+						if ( stoppedIn( response ) ) {
+							jobToken = '';
+							$status.text( 'Stopped from another window. Anything already done has been kept.' );
+							buttons( true );
+							return;
+						}
+
 						if ( busyIn( response ) ) {
 							jobToken = '';
 							watch( busyIn( response ) );
@@ -1001,6 +1075,13 @@
 				$.post( ajaxurl, { action: 'sbsk_images_orphans', nonce: nonce, job: jobToken, offset: offset } ).done( function ( response ) {
 					if ( ! response || ! response.success ) {
 						stopClock();
+
+						if ( stoppedIn( response ) ) {
+							jobToken = '';
+							$status.text( 'Stopped from another window. Anything already done has been kept.' );
+							buttons( true );
+							return;
+						}
 
 						if ( busyIn( response ) ) {
 							jobToken = '';
