@@ -2481,3 +2481,28 @@ a.sb-toggle:focus {
 	font-weight: 600;
 	line-height: 1;
 }
+
+/* Add a width and Add default sizes sit together on the left */
+.sbsk-width-actions__add {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+/* A width that is one of the standard sizes */
+.sbsk-width__default {
+	display: block;
+	color: #646970;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	font-size: 11px;
+}
+
+/* Standard widths get a green edge, any other width an orange one */
+.sbsk-width__name {
+	border-left: 3px solid #dba617;
+	border-radius: 0 4px 4px 0;
+}
+
+.sbsk-width.is-default .sbsk-width__name {
+	border-left-color: #85df07;
+}

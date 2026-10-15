@@ -92,6 +92,7 @@
 
 				$row.find( 'input' ).val( '' );
 				$row.find( '.sbsk-width__value' ).text( '' );
+				$row.removeClass( 'is-default is-duplicate' ).find( '.sbsk-width__default, .sbsk-width__clash, .sbsk-width__dupe' ).remove();
 				$widths.append( $row );
 				$row.find( 'input' ).trigger( 'focus' );
 			} );
@@ -99,6 +100,81 @@
 			$widths.on( 'click', '.sbsk-width__remove', function () {
 				$( this ).closest( '.sbsk-width' ).remove();
 			} );
+
+			// The standard widths: marked in the list, and added back by Add default sizes.
+			var defaults   = ( $widths.data( 'defaults' ) || [] ).map( Number );
+			var $addDefaults = $( '#sbsk-add-defaults' );
+			var $blank     = $widths.find( '.sbsk-width' ).first().clone();
+
+			$blank.removeClass( 'is-duplicate is-default' ).find( '.sbsk-width__clash, .sbsk-width__dupe, .sbsk-width__default' ).remove();
+
+			function listed() {
+				return $widths.find( 'input[type="number"]' ).map( function () {
+					return this.value === '' ? null : Number( this.value );
+				} ).get();
+			}
+
+			function missingDefaults() {
+				var have = listed();
+
+				return defaults.filter( function ( width ) {
+					return have.indexOf( width ) === -1;
+				} );
+			}
+
+			function syncDefaults() {
+				$addDefaults.prop( 'disabled', ! missingDefaults().length );
+			}
+
+			function markDefault( $row, value ) {
+				var isDefault = value !== '' && defaults.indexOf( Number( value ) ) !== -1;
+
+				$row.toggleClass( 'is-default', isDefault ).find( '.sbsk-width__default' ).remove();
+
+				if ( isDefault ) {
+					$row.find( '.sbsk-width__value' ).after( '<span class="sbsk-width__default">default size</span>' );
+				}
+			}
+
+			$widths.on( 'click', '.sbsk-width__remove', syncDefaults );
+
+			$widths.on( 'input', 'input[type="number"]', function () {
+				markDefault( $( this ).closest( '.sbsk-width' ), this.value );
+				syncDefaults();
+			} );
+
+			// Adds only the standard widths that are not in the list, each in order.
+			// Nothing is saved until Save changes, like Add a width.
+			$addDefaults.on( 'click', function () {
+				if ( ! $blank.length ) {
+					return;
+				}
+
+				missingDefaults().forEach( function ( width ) {
+					var $row    = $blank.clone();
+					var $before = $widths.find( '.sbsk-width' ).filter( function () {
+						var value = $( this ).find( 'input[type="number"]' ).val();
+
+						return value !== '' && Number( value ) > width;
+					} ).first();
+
+					$row.find( 'input[type="number"]' ).val( width );
+
+					if ( $before.length ) {
+						$row.insertBefore( $before );
+					} else {
+						$widths.append( $row );
+					}
+
+					// A real input event, so the name, the marks and the save button all follow.
+					$row.find( 'input[type="number"]' )[0].dispatchEvent( new Event( 'input', { bubbles: true } ) );
+				} );
+
+				syncDefaults();
+			} );
+
+			syncDefaults();
+
 
 			$widths.on( 'input', 'input[type="number"]', function () {
 				var $row  = $( this ).closest( '.sbsk-width' );
@@ -1056,7 +1132,7 @@
 		}
 
 		$( '#sbsk-reset-widths' ).on( 'click', function ( e ) {
-			if ( ! window.confirm( 'Put the standard image sizes back? Any widths you have added or changed will be lost.' ) ) {
+			if ( ! window.confirm( 'Put the standard image sizes back, and switch off medium_large, 1536x1536 and 2048x2048? Any widths you have added or changed will be lost.' ) ) {
 				e.preventDefault();
 			}
 		} );

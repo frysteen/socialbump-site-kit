@@ -862,6 +862,7 @@ are the three rules worth reading before you touch it.
 | sbsk_images_job (transient) | the Image Cleaner job running now: token, kind, who started it, when, and its counts. Renewed by each batch and gone 150 seconds after the last, so a closed window frees it |
 | socialbump_cards (user meta) | each user's card order and collapsed cards, per page key |
 | sbsk_github_token | encrypted, hub only, and deleted on any site that is not the hub |
+| sb_tweaks_site_kit_image_defaults | that the old standard image sizes were saved for a site already running, before the new set came in |
 | sbsk_pending_changes | notes for the next release, hub only, deleted elsewhere |
 
 ## Names, and what is stored where
@@ -2019,3 +2020,45 @@ dropdown, so the two never double up.
   the Media Library; each folder returned exactly the images the database
   holds for it. On Villa the Portfolios list sends 7 folders, and
   Uncategorised returns 4,755 of 4,928 images.
+
+## New standard image sizes (October 2026)
+
+The standard widths (SBSK_Images::DEFAULT_WIDTHS) are now 450, 665, 1330 and
+1920, from 240, 480, 640, 720, 960, 1200 and 1920. They suit a 1330 wide site
+and the srcset WordPress builds: thirds and quarters 450, halves 665, full
+width 1330, full width on high density screens 1920 (WordPress leaves anything
+over 2048 out of srcset, so 1920 is the top that gets used). With WordPress's
+medium 300 and large 1024 the steps are all about 1.3 to 1.5 times. On the same
+reasoning SBSK_Images_Rebuild::DEFAULT_OFF switches off medium_large (too
+close to 665), 1536x1536 and 2048x2048 (1920 covers both).
+
+- wp_off() uses DEFAULT_OFF when the images setting has no wp_off at all. A
+  saved empty list still means none off.
+- Reset to default sizes now puts back both the widths and DEFAULT_OFF.
+- sbsk_keep_old_image_defaults() in the main file runs once, straight after
+  sbsk_split_image_cleaner(), and records sb_tweaks_site_kit_image_defaults.
+  On a site already running Site Kit (an images setting saved, or the owned
+  sizes option present) it saves the old seven widths if none are saved (an
+  empty list counted as none) and an empty wp_off if that key is missing, so
+  nothing changes under the site. A new install has neither, since this runs
+  on plugins_loaded before the sizes are first registered, and gets the new
+  set. Moving an existing site over is done by hand on its Images page.
+- The size names image-240 to image-1200 stay on sites that already have
+  them; nothing renames or removes them.
+- Checked on the hub by running it against saved copies of the options (new
+  install, running and never saved, saved before wp_off existed, the hub as
+  it is) and restoring them, and through a real Reset to default sizes post,
+  also restored. The hub and Villa both had their own saved lists and kept
+  them.
+- The width list marks each of the standard widths with "default size" under
+  its name, from the server (width_row) and live as a width is typed
+  (admin.js, reading data-defaults on #sbsk-widths). Add default sizes, beside
+  Add a width, adds only the standard widths missing from the list, each in
+  order, and nothing is saved until Save changes. It is switched off when none
+  are missing. Reset's confirm now says it also switches off the three
+  WordPress sizes. Each name box has a left edge: green (#85df07, the is-good
+  colour) on a standard width, the row carrying is-default, and orange
+  (#dba617) on any other, blank rows included. Add a width now clears the
+  default mark, class and notes from the row it copies. Checked against the
+  real markup in jsdom: adding a row, adding the defaults, retyping a
+  default, removing one and adding again.

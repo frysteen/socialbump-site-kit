@@ -15,7 +15,13 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class SBSK_Images {
 
-	const DEFAULT_WIDTHS = [ 240, 480, 640, 720, 960, 1200, 1920 ];
+	/**
+	 * The standard set, for a 1330 wide site: thirds and quarters (450), halves
+	 * (665), full width (1330) and full width on high density screens (1920).
+	 * With WordPress's 300 and 1024 they make an even srcset ladder. Sites that
+	 * had the old set keep it: see sbsk_keep_old_image_defaults().
+	 */
+	const DEFAULT_WIDTHS = [ 450, 665, 1330, 1920 ];
 
 	public static function boot() {
 		add_action( 'after_setup_theme', [ __CLASS__, 'register_sizes' ] );
@@ -189,7 +195,8 @@ class SBSK_Images {
 		// Reset puts the standard set back, whatever is in the boxes.
 		if ( ! empty( $_POST['sbsk_reset_sizes'] ) ) {
 			$settings                    = (array) get_option( SBSK_Modules::SETTINGS_OPTION, [] );
-			$settings['images']['sizes'] = self::DEFAULT_WIDTHS;
+			$settings['images']['sizes']  = self::DEFAULT_WIDTHS;
+			$settings['images']['wp_off'] = SBSK_Images_Rebuild::DEFAULT_OFF;
 
 			update_option( SBSK_Modules::SETTINGS_OPTION, $settings );
 
@@ -318,7 +325,7 @@ class SBSK_Images {
 		echo '<span class="screen-reader-text">' . esc_html__( 'Add these image sizes', 'sb-site-kit' ) . '</span></label>';
 		echo '</div>';
 		echo '<div class="sbsk-sizes-body" id="sbsk-sizes-body"' . ( $sizes_on ? '' : ' hidden' ) . '>';
-		echo '<div class="sbsk-widths" id="sbsk-widths">';
+		echo '<div class="sbsk-widths" id="sbsk-widths" data-defaults="' . esc_attr( wp_json_encode( self::DEFAULT_WIDTHS ) ) . '">';
 
 		foreach ( self::widths() as $width ) {
 			echo self::width_row( (int) $width );
@@ -326,7 +333,10 @@ class SBSK_Images {
 
 		echo '</div>';
 		echo '<div class="sbsk-width-actions">';
+		echo '<span class="sbsk-width-actions__add">';
 		echo '<button type="button" class="button" id="sbsk-add-width">' . esc_html__( 'Add a width', 'sb-site-kit' ) . '</button>';
+		echo '<button type="button" class="button" id="sbsk-add-defaults">' . esc_html__( 'Add default sizes', 'sb-site-kit' ) . '</button>';
+		echo '</span>';
 		echo '<button type="submit" class="button sbsk-button--danger" name="sbsk_reset_sizes" value="1" data-sb-always-on id="sbsk-reset-widths">' . esc_html__( 'Reset to default sizes', 'sb-site-kit' ) . '</button>';
 		echo '</div>';
 		echo '</div>';
@@ -527,6 +537,10 @@ class SBSK_Images {
 	/** One row in the width list. */
 	private static function width_row( $width ) {
 		$clash = self::clashing_size( $width );
+
+		// One of the standard widths, as Add default sizes and Reset would put it.
+		$default = in_array( (int) $width, self::DEFAULT_WIDTHS, true ) ? '<span class="sbsk-width__default">' . esc_html__( 'default size', 'sb-site-kit' ) . '</span>' : '';
+
 		$note  = $clash === '' ? '' : sprintf(
 			'<span class="sbsk-width__clash">%s</span>',
 			/* translators: %s: the name of another image size */
@@ -535,10 +549,12 @@ class SBSK_Images {
 
 		// The note sits inside the grey box under the name, so it never squeezes the row.
 		return sprintf(
-			'<div class="sbsk-width"><input type="number" name="sbsk_widths[]" value="%1$s" min="16" max="5000" step="1" class="small-text"><code class="sbsk-width__name">image-<span class="sbsk-width__value">%1$s</span>%3$s</code><button type="button" class="button-link sbsk-width__remove" aria-label="%2$s">&#10005;</button></div>',
+			'<div class="sbsk-width%5$s"><input type="number" name="sbsk_widths[]" value="%1$s" min="16" max="5000" step="1" class="small-text"><code class="sbsk-width__name">image-<span class="sbsk-width__value">%1$s</span>%4$s%3$s</code><button type="button" class="button-link sbsk-width__remove" aria-label="%2$s">&#10005;</button></div>',
 			esc_attr( $width ),
 			esc_attr__( 'Remove', 'sb-site-kit' ),
-			$note
+			$note,
+			$default,
+			$default === '' ? '' : ' is-default'
 		);
 	}
 

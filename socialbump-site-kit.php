@@ -3,7 +3,7 @@
  * Plugin Name: SocialBUMP Site Kit
  * Plugin URI:  https://socialbump.com.au
  * Description: SocialBUMP base styling, ACF fields, shortcodes and admin tweaks. Switch each feature on or off under SB Site Kit.
- * Version:     1.2.0
+ * Version:     1.2.1
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author:      SocialBUMP
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // Tells the SocialBUMP hub this site has the plugin, its version and whether it is active.
 require_once __DIR__ . '/includes/class-socialbump-reporter.php';
 
-define( 'SBSK_VERSION', '1.2.0' );
+define( 'SBSK_VERSION', '1.2.1' );
 define( 'SBSK_FILE', __FILE__ );
 define( 'SBSK_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SBSK_URL', plugin_dir_url( __FILE__ ) );
@@ -155,6 +155,53 @@ function sbsk_split_image_cleaner() {
 }
 
 /**
+ * The standard image sizes changed in 1.2.1, from 240, 480, 640, 720, 960,
+ * 1200 and 1920 to 450, 665, 1330 and 1920, with medium_large, 1536x1536 and
+ * 2048x2048 switched off. A site already running Site Kit that never saved
+ * its Images page was using the old set straight from the code, so the old
+ * set is saved for it here and nothing changes under it. Only a new install,
+ * or Reset to default sizes, gets the new set. Runs once and records that it
+ * has.
+ *
+ * A site counts as already running when it has an Images setting saved or a
+ * list of sizes the kit registered. A new install has neither, since this runs
+ * on plugins_loaded, before the sizes are first registered.
+ */
+function sbsk_keep_old_image_defaults() {
+	if ( (int) get_option( 'sb_tweaks_site_kit_image_defaults' ) >= 1 ) {
+		return;
+	}
+
+	$settings = (array) get_option( SBSK_Modules::SETTINGS_OPTION, [] );
+	$running  = isset( $settings['images'] ) || get_option( 'sb_tweaks_site_kit_owned_image_sizes' ) !== false;
+
+	if ( $running ) {
+		$images  = isset( $settings['images'] ) && is_array( $settings['images'] ) ? $settings['images'] : [];
+		$changed = false;
+
+		// An empty list meant the code's own set, the same as no list.
+		if ( empty( $images['sizes'] ) || ! is_array( $images['sizes'] ) ) {
+			$images['sizes'] = [ 240, 480, 640, 720, 960, 1200, 1920 ];
+			$changed         = true;
+		}
+
+		// No list of switched off sizes meant none were off.
+		if ( ! array_key_exists( 'wp_off', $images ) ) {
+			$images['wp_off'] = [];
+			$changed          = true;
+		}
+
+		if ( $changed ) {
+			$settings['images'] = $images;
+
+			update_option( SBSK_Modules::SETTINGS_OPTION, $settings );
+		}
+	}
+
+	update_option( 'sb_tweaks_site_kit_image_defaults', 1, false );
+}
+
+/**
  * Load the plugin. Unlike Bricks Tweaks this has no theme requirement:
  * a module that needs Bricks, ACF or WooCommerce declares it in 'requires'.
  */
@@ -174,6 +221,7 @@ function sbsk_boot() {
 	require_once SBSK_PATH . 'includes/class-sbsk-transfer.php';
 
 	sbsk_split_image_cleaner();
+	sbsk_keep_old_image_defaults();
 
 	SBSK_Modules::instance()->boot();
 	SBSK_Settings::instance()->boot();

@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,10 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.2.1 =
+* Images: new standard image sizes for new sites and for Reset to default sizes: 450, 665, 1330 and 1920, with medium_large, 1536x1536 and 2048x2048 switched off. They suit a 1330 wide site and give the browser an even spread of sizes to choose from. Sites already running Site Kit keep the sizes they have.
+* Images: the image sizes list marks each standard width as a default size, with a green edge, and any other width with an orange one. A new Add default sizes button puts back any standard widths missing from the list without touching the others.
+
 = 1.2.0 =
 * Image Cleaner: clearing old thumbnails is much faster on a large library. Each image used to take over a second while it checked the files were not used by another image; that check now reads the library once. A long clear also no longer skips images part way through.
 * Image Cleaner: the notice after adding a size to Old thumbnails to clear (or taking one off) no longer pushes the page layout out of place.

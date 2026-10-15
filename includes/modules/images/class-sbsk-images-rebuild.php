@@ -34,6 +34,13 @@ class SBSK_Images_Rebuild {
 	const OFFABLE = [ 'medium_large', 'large', '1536x1536', '2048x2048' ];
 
 	/**
+	 * Switched off on a site that has never saved its Images page, and by Reset
+	 * to default sizes: 1920 covers 1536 and 2048, and medium_large sits too
+	 * close to 665 to be worth a file.
+	 */
+	const DEFAULT_OFF = [ 'medium_large', '1536x1536', '2048x2048' ];
+
+	/**
 	 * WordPress sizes switched off on the Images page (images setting wp_off).
 	 * They are taken out of WordPress's size list, so nothing makes them, and
 	 * their files count as old sizes to clear without being chosen first.
@@ -43,7 +50,14 @@ class SBSK_Images_Rebuild {
 			return [];
 		}
 
-		return array_values( array_intersect( (array) SBSK_Modules::instance()->setting( 'images', 'wp_off' ), self::OFFABLE ) );
+		$off = SBSK_Modules::instance()->setting( 'images', 'wp_off' );
+
+		// Never saved: the standard set is off.
+		if ( $off === null ) {
+			$off = self::DEFAULT_OFF;
+		}
+
+		return array_values( array_intersect( (array) $off, self::OFFABLE ) );
 	}
 	/** Remember the size names we register, so we know what is safe to delete. */
 	public static function remember( array $names ) {
