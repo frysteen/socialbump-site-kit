@@ -642,9 +642,10 @@
 			 * The end of a run. The progress box keeps its last line, as it always
 			 * has, and a summary pops up: Finished or Stopped, the summary in bold
 			 * with the time it took, Close, and Scan again for a fresh scan. The X,
-			 * Escape and a click outside close it too.
+			 * Escape and a click outside close it too. extra, when given, goes in
+			 * the report under that line: the files a delete left alone.
 			 */
-			function finished( text ) {
+			function finished( text, extra ) {
 				var parts   = /^(Finished|Stopped)\.\s*(.*)$/.exec( text );
 				var seconds = elapsed();
 				var rate    = seenNow > 0 && seconds > 0 ? ', ' + ( Math.round( ( seconds / seenNow ) * 100 ) / 100 ) + 's per image' : '';
@@ -661,7 +662,7 @@
 				$cancel.prop( 'disabled', false );
 
 				$line.append( $( '<strong></strong>' ).text( ( parts ? parts[2] : text ).replace( /\.$/, '' ) ), document.createTextNode( ' in ' + spoken( seconds ) + rate + '.' ) );
-				$body.append( $( '<p class="sbsk-summary__head"></p>' ).text( parts ? parts[1] : 'Finished' ), $( '<div class="sbsk-job__report"></div>' ).append( $line ) );
+				$body.append( $( '<p class="sbsk-summary__head"></p>' ).text( parts ? parts[1] : 'Finished' ), $( '<div class="sbsk-job__report"></div>' ).append( $line, extra || '' ) );
 
 				openModal( { title: jobTitle || 'Finished', body: $body, cancel: 'Close', action: 'Scan again' }, function () {
 					$progress.prop( 'hidden', true );
@@ -950,21 +951,22 @@
 				$status.text( 'Deleting...' );
 				startClock();
 
-				// The files left alone, kept in the panel once the popup is closed.
+				// The files left alone, in the summary that pops up at the end. A
+				// long list scrolls inside the popup.
 				function leftAlone() {
 					if ( ! skipped.length ) {
 						return '';
 					}
 
-					var note = '<div class="sbsk-deep__skipped"><p>' + skipped.length + ' file' + ( skipped.length === 1 ? ' was' : 's were' ) + ' left alone:</p><ul>';
+					var note = '<div class="sbsk-summary__skipped"><p>' + skipped.length + ' file' + ( skipped.length === 1 ? ' was' : 's were' ) + ' left alone:</p><ul>';
 
-					skipped.slice( 0, 20 ).forEach( function ( skip ) {
+					skipped.slice( 0, 100 ).forEach( function ( skip ) {
 						// why_html is built and escaped server side, and carries the edit links.
 						note += '<li><code>' + $( '<span>' ).text( skip.name ).html() + '</code> <span>' + ( skip.why_html || $( '<span>' ).text( skip.why ).html() ) + '</span></li>';
 					} );
 
-					if ( skipped.length > 20 ) {
-						note += '<li class="sbsk-deep__more">and ' + ( skipped.length - 20 ) + ' more</li>';
+					if ( skipped.length > 100 ) {
+						note += '<li class="sbsk-deep__more">and ' + ( skipped.length - 100 ) + ' more</li>';
 					}
 
 					return note + '</ul></div>';
@@ -1019,13 +1021,13 @@
 							return;
 						}
 
-						finished( ( data.done ? 'Finished. ' : 'Stopped. ' ) + removed + ' file' + ( removed === 1 ? '' : 's' ) + ' removed, ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed.' );
+						finished( ( data.done ? 'Finished. ' : 'Stopped. ' ) + removed + ' file' + ( removed === 1 ? '' : 's' ) + ' removed, ' + Math.round( freed / 1048576 * 10 ) / 10 + ' MB freed.', leftAlone() );
 
 						if ( data.html ) {
-							$deep.html( leftAlone() + data.html );
+							$deep.html( data.html );
 							deepButtons();
 						} else {
-							$deep.html( leftAlone() );
+							$deep.prop( 'hidden', true ).empty();
 						}
 
 						scan( true );
@@ -1443,7 +1445,8 @@
 		// Buttons that ask first: data-sbsk-confirm holds the question, with %s
 		// standing for the value of the field named in data-sbsk-confirm-field.
 		// data-sbsk-progress opens the progress popup once it is confirmed, for a
-		// long post such as Publish release; it stays until the next page loads.
+		// long post such as Publish release, and the form then posts in the
+		// background (background() below) so the spinner keeps turning.
 		$( document ).on( 'click', '[data-sbsk-confirm]', function ( e ) {
 			if ( confirmed( this ) ) {
 				return;
@@ -1472,8 +1475,78 @@
 
 					job.busy();
 					job.status( String( $button.data( 'sbsk-progress-status' ) || '' ).replace( '%s', value ) );
+
+					if ( button.form ) {
+						button.form.sbskJob = { job: job, button: button, value: value };
+					}
 				}
 			} );
+		} );
+
+		/**
+		 * The post behind a confirmed data-sbsk-progress button, sent in the
+		 * background. A normal form post starts leaving the page straight away,
+		 * and the browser stops animating the spinner while it waits. With
+		 * sbsk_background sent, the handler answers with JSON ({ ok, message })
+		 * and the outcome shows in the popup: data-sbsk-progress-item (%s for
+		 * the field value) and data-sbsk-progress-result make the report line,
+		 * and data-sbsk-progress-done is the summary. Close reloads the page.
+		 */
+		function background( form, run ) {
+			var $button = $( run.button );
+			var data    = new FormData( form );
+			var job     = run.job;
+			var parts   = String( run.value ).trim().split( '.' );
+			var unclear = 'No clear answer came back from the server, so check GitHub and this page before trying again.';
+
+			// A version typed as 1.1 is published as 1.1.0, so say that.
+			if ( /^[0-9.]+$/.test( parts.join( '.' ) ) ) {
+				while ( parts.length < 3 ) {
+					parts.push( '0' );
+				}
+			}
+
+			data.append( 'sbsk_background', '1' );
+
+			// getAttribute, because form.action is the hidden field named action.
+			window.fetch( form.getAttribute( 'action' ), { method: 'POST', body: data, credentials: 'same-origin' } )
+				.then( function ( response ) {
+					return response.text();
+				} )
+				.then( function ( body ) {
+					var res = null;
+
+					// Anything PHP printed before the answer is skipped.
+					try {
+						res = JSON.parse( body.slice( Math.max( 0, body.indexOf( '{"ok"' ) ) ) );
+					} catch ( err ) {
+						res = null;
+					}
+
+					if ( ! res || typeof res.ok !== 'boolean' ) {
+						job.fail( unclear );
+					} else if ( ! res.ok ) {
+						job.fail( res.message || unclear );
+					} else {
+						job.log( String( $button.data( 'sbsk-progress-item' ) || '' ).replace( '%s', parts.join( '.' ) ), $button.data( 'sbsk-progress-result' ) || '' );
+						job.finish( $button.data( 'sbsk-progress-done' ) || 'Finished' );
+					}
+				} )
+				.catch( function () {
+					job.fail( 'The connection dropped before an answer came back, so check GitHub and this page before trying again.' );
+				} );
+		}
+
+		$( document ).on( 'submit', 'form', function ( e ) {
+			var run = this.sbskJob;
+
+			if ( ! run || ! window.fetch || ! window.FormData ) {
+				return;
+			}
+
+			e.preventDefault();
+			this.sbskJob = null;
+			background( this, run );
 		} );
 
 		$( '.sbsk-card .sbsk-switch input' ).on( 'change', function () {

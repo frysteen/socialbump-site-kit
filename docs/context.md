@@ -2165,13 +2165,14 @@ Finished over a grey report card (the summary in bold and the time taken).
   sb-tweaks-job names with Site Kit's prefix), plus busy() and __spin: a
   spinner in place of the bar for one step with no telling how long it will
   take. Sam's call: a bar suggests a count that a single post does not have.
-  It turns with transform alone, so it keeps going while the page posts. Only Publish release uses it:
-  data-sbsk-progress and data-sbsk-progress-status on the button open it once
-  the confirm is accepted (and only when the form is valid), and it stays
-  until the page the form posts to loads. Enqueued with admin.js on Site
-  Kit's pages.
+  Only Publish release uses it: data-sbsk-progress and
+  data-sbsk-progress-status on the button open it once the confirm is
+  accepted (and only when the form is valid), and the form then posts in the
+  background (see Publish posts in the background). Enqueued with admin.js on
+  Site Kit's pages.
 - For the merge into SocialBUMP Tweaks: drop progress.js and the .sbsk-job
-  styles, point data-sbsk-progress at SBTweaksProgress and give that busy().
+  styles and point data-sbsk-progress at SBTweaksProgress, which has had
+  busy() since October 2026.
   Image Cleaner's box and its summary need nothing from the framework beyond
   a confirm popup that takes extra content and its own Cancel words.
 - Checked: admin.js passes node --check (the md5 matched the hub copy); in
@@ -2207,3 +2208,86 @@ image-1200, showed them all as Site Kit's. Checked on the hub by registering
 image-240, image-2000 and two WooCommerce sizes in one request and reading
 size_groups(): they landed in Other and WooCommerce, the hub's own five
 widths in Image Sizes. The live page shows Edit Sizes beside Image Sizes.
+
+## Publish posts in the background (October 2026)
+
+The spinner on Publish release sat still. The form posted the normal way, so
+the browser started leaving the page as soon as the popup opened, and browsers
+stop animating a page they are leaving. Now all three hub plugins (Site Kit,
+SocialBUMP Tweaks, SEO for AI) post Publish release in the background, so the
+page stays live and the spinner turns until GitHub has answered.
+
+- The script sends the same form with fetch, plus sbsk_background=1. back() in
+  SBSK_Release still saves the notice, then, with that field set, answers
+  wp_send_json( { ok, message } ) instead of redirecting. message is the
+  notice with its tags stripped.
+- admin.js: the confirm's before() stores { job, button, value } on the form
+  as sbskJob, and a submit handler on every form picks that up, stops the
+  normal post and calls background(). The browser's own validation still runs
+  first, because submit only fires on a valid form.
+- The outcome shows in the popup. Worked: a report line from
+  data-sbsk-progress-item ("Site Kit %s", the version padded to x.y.z) and
+  data-sbsk-progress-result ("published"), with data-sbsk-progress-done
+  ("Publishing complete") as the summary. Refused: fail() with the handler's
+  own message. Anything that is not that JSON (an expired link, a fatal error)
+  or a dropped connection: fail() saying no clear answer came back and to check
+  GitHub and the page first, because the publish may still have gone through.
+- Close reloads the Publishing page, which then shows the usual notice (with
+  View the release when it worked) and the new version.
+- Without JavaScript, or a post without the field, nothing changes: redirect
+  and notice as before. SocialBUMP Tweaks' Publish on the Installs page
+  (SB_Tweaks_Hub_Publish) never sends the field, so it still catches the
+  redirect the way it always has.
+- Hub only, so no release note.
+- Checked: admin.js and progress.js pass node --check, and the md5s matched on
+  the hub. In jsdom: confirm, then the spinner while the answer is awaited,
+  then a success, a refused publish, an HTML answer and a dropped connection;
+  Cancel and an invalid version post nothing. On the hub over HTTP with a
+  session: the Publishing page loads; a background post with the current
+  version comes back as JSON, ok false, "has to be higher than the current
+  version", with the main plugin file untouched; the same post without the
+  field still redirects (302); a bad nonce gives WordPress's 403 page. The
+  notices the tests left were deleted. Not yet seen in a browser, and no real
+  publish has been run through it yet.
+- Fix, same day: the first real publish failed at once with No clear answer. The
+  script fetched form.action, and in a browser that is the hidden input named
+  action, not the form's address, so the post went to a junk URL and never
+  reached WordPress (nothing was published). It now uses
+  form.getAttribute( 'action' ). jsdom does not do that lookup, which is why
+  the simulation passed; the test now fakes it, failed the old code, and
+  passes the fix.
+
+## Sizes panel in groups, left alone list in the summary (October 2026)
+
+Two follow ups to the size groups and the summary popup.
+
+- SBSK_Images_Tools::sizes_list() (the panel on each image: the media pop-up,
+  fetched by AJAX, and the box on the attachment edit screen) builds its rows
+  keyed by size name, then lays them out in SBSK_Images_Cleaner::size_groups()
+  order: Image Sizes, Other Image Sizes, WooCommerce, WordPress, each in width
+  order, an empty group left out. Each group is a p.sbsk-sizes__group label
+  over a ul.sbsk-sizes__list, no all | none links. Anything no group takes
+  (there should be nothing) goes in a final unlabelled list.
+- The whole thing is one div.sbsk-sizes. That matters: the pane's script
+  swaps .sbsk-sizes (the loading line, and the old list after Regenerate) for
+  the answer with replaceWith, so more than one .sbsk-sizes would duplicate
+  the list. The inner lists use sbsk-sizes__list for the same reason.
+- The panel's heading is still "SocialBUMP Site Kit Sizes". Offered to Sam as
+  plain "Image sizes"; not changed.
+- Find leftover thumbnails' delete: the files left alone (with why_html, the
+  in use links) now go into the summary popup under the bold line, through
+  finished( text, extra ). The list is div.sbsk-summary__skipped, capped at
+  100 rows plus "and N more", and scrolls past 220px so Close and Scan again
+  stay in view. The yellow .sbsk-deep__skipped box is no longer put in the
+  panel; the panel gets just the rescanned list, or is hidden when there is
+  none. deep_skipped() in the tools class builds the old box server side and
+  is not called anywhere.
+- Release notes queued for both.
+- Checked: admin.js passes node --check and its md5 matched on the hub. In
+  jsdom with stubbed answers: a delete with files left alone (list and link in
+  the popup, no yellow box behind, rescanned list in the panel), one with
+  none, and one with an empty rescan (panel hidden). On the hub: sizes_list()
+  for a real image gives one wrapper with Image Sizes and WordPress, a size
+  added for that request only showed under Other Image Sizes, and the
+  attachment edit page renders the grouped box with no PHP errors. Not yet
+  seen in a browser.

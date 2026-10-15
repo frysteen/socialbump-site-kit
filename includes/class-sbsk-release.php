@@ -97,6 +97,17 @@ class SBSK_Release {
 			5 * MINUTE_IN_SECONDS
 		);
 
+		// Publish posted in the background wants the answer, not the page. The
+		// notice is still saved, so it shows when the popup's Close reloads.
+		if ( ! empty( $_POST['sbsk_background'] ) ) {
+			wp_send_json(
+				[
+					'ok'      => $type === 'success',
+					'message' => trim( wp_strip_all_tags( $message ) ),
+				]
+			);
+		}
+
 		wp_safe_redirect( admin_url( 'admin.php?page=' . SBSK_Settings::PAGE_SLUG . '-publishing' ) );
 		exit;
 	}
@@ -846,7 +857,7 @@ class SBSK_Release {
 							</p>
 						<?php endif; ?>
 						<div class="sbsk-release__actions">
-							<button type="submit" class="button button-primary" <?php disabled( $token === '' ); ?> data-sbsk-confirm="Publish version %s to every site running this plugin?" data-sbsk-confirm-field="sbsk_version" data-sbsk-confirm-title="Publish release" data-sbsk-confirm-action="Publish" data-sbsk-progress="Publishing" data-sbsk-progress-status="Building, pushing to GitHub and publishing %s"><?php esc_html_e( 'Publish release', 'sb-site-kit' ); ?></button>
+							<button type="submit" class="button button-primary" <?php disabled( $token === '' ); ?> data-sbsk-confirm="Publish version %s to every site running this plugin?" data-sbsk-confirm-field="sbsk_version" data-sbsk-confirm-title="Publish release" data-sbsk-confirm-action="Publish" data-sbsk-progress="Publishing" data-sbsk-progress-status="Building, pushing to GitHub and publishing %s" data-sbsk-progress-item="Site Kit %s" data-sbsk-progress-result="published" data-sbsk-progress-done="Publishing complete"><?php esc_html_e( 'Publish release', 'sb-site-kit' ); ?></button>
 						</div>
 					</form>
 				</div>

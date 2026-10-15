@@ -3,11 +3,11 @@
  * window.SBTweaksProgress) for Site Kit, which runs without SocialBUMP Tweaks.
  * The same look and the same calls, as window.SBSKProgress, with one addition:
  * busy(), a spinner in place of the bar for one step with no telling how long
- * it will take, such as Publish release, which posts the page and shows the
- * popup until the next one loads.
+ * it will take, such as Publish release, which posts in the background while
+ * the spinner turns.
  *
- * When Site Kit becomes a SocialBUMP Tweaks module this file goes, and the
- * framework's popup needs busy() added.
+ * When Site Kit becomes a SocialBUMP Tweaks module this file goes; the
+ * framework's popup has busy() as well.
  *
  *   var job = SBSKProgress.open( 'Publishing' );
  *   job.busy();                          // a spinner in place of the bar

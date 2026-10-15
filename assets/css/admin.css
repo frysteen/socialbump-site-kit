@@ -2668,8 +2668,8 @@ a.sb-toggle:focus {
 
 /*
  * busy(): one step with no telling how long it will take, such as Publish
- * release, so a spinner in place of the bar. It turns with transform alone,
- * which the browser keeps running while the page is busy posting the form.
+ * release, so a spinner turns in place of the bar. Publish posts in the
+ * background (admin.js), so the page stays live and the spinner keeps going.
  */
 .sbsk-job__spin {
 	display: none;
@@ -2831,4 +2831,53 @@ a.sb-toggle:focus {
 	margin: 2px 0 6px;
 	color: #787c82;
 	font-size: 11px;
+}
+
+/* An image's sizes panel, in the Image Cleaner's groups. */
+.sbsk-sizes__group {
+	margin: 10px 0 2px;
+	color: #646970;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.sbsk-sizes__group:first-child {
+	margin-top: 0;
+}
+
+.sbsk-sizes .sbsk-sizes__list {
+	margin: 0;
+}
+
+/* The files a delete left alone, in its summary popup. A long list scrolls. */
+.sbsk-summary__skipped {
+	margin: 10px 0 0;
+	padding: 10px 0 0;
+	border-top: 1px solid #dcdcde;
+	font-size: 12px;
+}
+
+.sbsk-summary__skipped p {
+	margin: 0 0 4px;
+	font-weight: 600;
+}
+
+.sbsk-summary__skipped ul {
+	max-height: 220px;
+	margin: 0;
+	overflow-y: auto;
+}
+
+.sbsk-summary__skipped li {
+	margin: 2px 0;
+}
+
+.sbsk-summary__skipped code {
+	padding: 0;
+	background: none;
+	font-size: 12px;
+}
+
+.sbsk-summary__skipped li > span {
+	color: #787c82;
 }

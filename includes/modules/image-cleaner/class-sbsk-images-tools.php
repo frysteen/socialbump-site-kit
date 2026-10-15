@@ -1540,7 +1540,7 @@ class SBSK_Images_Tools {
 		$meta    = (array) wp_get_attachment_metadata( $id );
 		$have    = (array) ( $meta['sizes'] ?? [] );
 		$missing = SBSK_Images_Rebuild::missing_all( $id, $meta );
-		$rows    = '';
+		$rows    = [];
 
 		// Listed is not the same as there. A size whose file has gone still has its
 		// metadata entry, and saying the dimensions here would be a lie.
@@ -1584,10 +1584,36 @@ class SBSK_Images_Tools {
 			}
 
 			// $state carries its own markup for a skipped row, and is built here.
-			$rows .= '<li class="' . esc_attr( $class ) . '"><span>' . $label . '</span><span>' . ( $class === 'is-skipped' ? wp_kses( $state, [ 'em' => [] ] ) : esc_html( $state ) ) . '</span></li>';
+			$rows[ $name ] = '<li class="' . esc_attr( $class ) . '"><span>' . $label . '</span><span>' . ( $class === 'is-skipped' ? wp_kses( $state, [ 'em' => [] ] ) : esc_html( $state ) ) . '</span></li>';
 		}
 
-		return '<ul class="sbsk-sizes">' . $rows . '</ul>';
+		// In the same groups as the Image Cleaner's Sizes panel, each in width
+		// order, so the two lists read the same way.
+		$groups = class_exists( 'SBSK_Images_Cleaner' ) ? SBSK_Images_Cleaner::size_groups() : [];
+		$html   = '';
+
+		foreach ( $groups as $group ) {
+			$list = '';
+
+			foreach ( array_keys( $group['sizes'] ) as $name ) {
+				if ( isset( $rows[ $name ] ) ) {
+					$list .= $rows[ $name ];
+					unset( $rows[ $name ] );
+				}
+			}
+
+			if ( $list !== '' ) {
+				$html .= '<p class="sbsk-sizes__group">' . esc_html( $group['title'] ) . '</p><ul class="sbsk-sizes__list">' . $list . '</ul>';
+			}
+		}
+
+		// Anything the groups did not take, which should be nothing.
+		if ( $rows ) {
+			$html .= '<ul class="sbsk-sizes__list">' . implode( '', $rows ) . '</ul>';
+		}
+
+		// One wrapper, which the pane's script swaps in for the loading line.
+		return '<div class="sbsk-sizes">' . $html . '</div>';
 	}
 
 
