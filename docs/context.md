@@ -2162,8 +2162,10 @@ Finished over a grey report card (the summary in bold and the time taken).
 - assets/js/progress.js is a copy of SocialBUMP Tweaks' progress.js as
   window.SBSKProgress (classes .sbsk-job, __box, __timer, __title, __track,
   __bar, __count, __current, __report, __summary, __close, the framework's
-  sb-tweaks-job names with Site Kit's prefix), plus busy(): a bar that
-  sweeps when there is no count to show. Only Publish release uses it:
+  sb-tweaks-job names with Site Kit's prefix), plus busy() and __spin: a
+  spinner in place of the bar for one step with no telling how long it will
+  take. Sam's call: a bar suggests a count that a single post does not have.
+  It turns with transform alone, so it keeps going while the page posts. Only Publish release uses it:
   data-sbsk-progress and data-sbsk-progress-status on the button open it once
   the confirm is accepted (and only when the form is valid), and it stays
   until the page the form posts to loads. Enqueued with admin.js on Site
@@ -2181,3 +2183,27 @@ Finished over a grey report card (the summary in bold and the time taken).
   busy(), step() and finish() were run in jsdom. On the hub the Image Cleaner
   page renders the box and loads both scripts, and Publish release carries
   the attributes. Not yet seen in a browser.
+
+## Image Cleaner's size groups say where each size comes from (October 2026)
+
+The Sizes panel lists every registered size in four groups, in this order,
+each in width order with its own all | none links, and a group with nothing in
+it is not shown:
+
+- Image Sizes: Site Kit's own, the image-<width> names for the widths the
+  Images page registers right now (Images switched on, its Image sizes switch
+  on, SBSK_Images::widths()). Edit Sizes sits beside this heading, not on the
+  panel heading, since these are the only ones it edits, and only shows while
+  Images is on.
+- Other Image Sizes: everything else, with a grey line under the heading
+  ("Added by the theme, a snippet or another plugin."). WordPress does not
+  record who registered a size, so nothing finer can be said honestly.
+- WooCommerce: names starting woocommerce_.
+- WordPress: thumbnail, medium, medium_large, large, 1536x1536, 2048x2048.
+
+It used to put any name starting image- under Image Sizes, so a site with a
+WP Codebox snippet registering image-2000, or the old image-240 to
+image-1200, showed them all as Site Kit's. Checked on the hub by registering
+image-240, image-2000 and two WooCommerce sizes in one request and reading
+size_groups(): they landed in Other and WooCommerce, the hub's own five
+widths in Image Sizes. The live page shows Edit Sizes beside Image Sizes.

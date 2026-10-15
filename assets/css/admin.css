@@ -2666,18 +2666,34 @@ a.sb-toggle:focus {
 	background: #b32d2e;
 }
 
-/* busy(): no count yet, so the bar sweeps across. */
-.sbsk-job.is-busy .sbsk-job__bar {
-	width: 40%;
-	animation: sbsk-job-sweep 1.4s ease-in-out infinite;
+/*
+ * busy(): one step with no telling how long it will take, such as Publish
+ * release, so a spinner in place of the bar. It turns with transform alone,
+ * which the browser keeps running while the page is busy posting the form.
+ */
+.sbsk-job__spin {
+	display: none;
 }
 
-@keyframes sbsk-job-sweep {
-	from {
-		margin-left: -40%;
-	}
+.sbsk-job.is-busy .sbsk-job__track {
+	display: none;
+}
+
+.sbsk-job.is-busy .sbsk-job__spin {
+	display: block;
+	box-sizing: border-box;
+	width: 34px;
+	height: 34px;
+	margin: 4px auto 0;
+	border: 3px solid #f0f0f1;
+	border-top-color: var(--sbsk-accent, #85df07);
+	border-radius: 50%;
+	animation: sbsk-job-spin 0.8s linear infinite;
+}
+
+@keyframes sbsk-job-spin {
 	to {
-		margin-left: 100%;
+		transform: rotate(360deg);
 	}
 }
 
@@ -2798,4 +2814,21 @@ a.sb-toggle:focus {
 /* A run that failed turns its bar red in the progress box. */
 .sbsk-progress.is-failed .sbsk-rebuild__bar span {
 	background: #b32d2e;
+}
+
+/* Image Cleaner's size groups: Edit Sizes beside Image Sizes, and the note under Other Image Sizes. */
+.sbsk-sizegroup__title {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 10px;
+}
+
+.sbsk-sizegroup__edit {
+	font-size: 11px;
+}
+
+.sbsk-sizegroup__note {
+	margin: 2px 0 6px;
+	color: #787c82;
+	font-size: 11px;
 }

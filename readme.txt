@@ -4,7 +4,7 @@ Tags: acf, shortcodes, admin
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.2.3
+Stable tag: 1.2.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,9 @@ Every feature is a module. Most can be switched on or off under SB Site Kit, and
 This plugin works on any WordPress site. It does not require a page builder.
 
 == Changelog ==
+= 1.2.4 =
+* Image Cleaner: the Sizes list now shows where each size comes from: Image Sizes (the ones set on the Images page, with Edit Sizes beside them), Other Image Sizes (added by the theme, a snippet or another plugin), WooCommerce and WordPress.
+
 = 1.2.3 =
 * Images: a two thirds width size, image-890, is now one of the standard sizes (450, 665, 890, 1330 and 1920). It stays 890 wide however tall the image is, unlike WordPress's large. Sites with their own list keep it; Add default sizes adds 890.
 * Images: Reset to default sizes now asks in a popup. When WordPress's own sizes have been changed it lists each one, name in bold, with a tick box to put them back to WordPress's defaults as well.

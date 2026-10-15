@@ -2,14 +2,15 @@
  * The progress popup: a copy of SocialBUMP Tweaks' (assets/js/progress.js,
  * window.SBTweaksProgress) for Site Kit, which runs without SocialBUMP Tweaks.
  * The same look and the same calls, as window.SBSKProgress, with one addition:
- * busy(), a bar that sweeps for work with no count to show, such as Publish
- * release, which posts the page and shows the popup until the next one loads.
+ * busy(), a spinner in place of the bar for one step with no telling how long
+ * it will take, such as Publish release, which posts the page and shows the
+ * popup until the next one loads.
  *
  * When Site Kit becomes a SocialBUMP Tweaks module this file goes, and the
  * framework's popup needs busy() added.
  *
  *   var job = SBSKProgress.open( 'Publishing' );
- *   job.busy();                          // a sweeping bar, no count yet
+ *   job.busy();                          // a spinner in place of the bar
  *   job.step( 1, 3, 'Label: detail' );   // bar, "1 of 3", current item
  *   job.status( 'Building the zip' );    // replace the bold line
  *   job.log( 'Item', 'result' );         // a report line
@@ -39,6 +40,7 @@
 			'<div class=' + q( 'sbsk-job__box' ) + '>' +
 			'<span class=' + q( 'sbsk-job__timer' ) + '></span>' +
 			'<h2 class=' + q( 'sbsk-job__title' ) + '></h2>' +
+			'<span class=' + q( 'sbsk-job__spin' ) + ' aria-hidden=' + q( 'true' ) + '></span>' +
 			'<div class=' + q( 'sbsk-job__track' ) + '><div class=' + q( 'sbsk-job__bar' ) + '></div></div>' +
 			'<p class=' + q( 'sbsk-job__count' ) + '></p>' +
 			'<p class=' + q( 'sbsk-job__current' ) + '></p>' +
@@ -138,7 +140,7 @@
 		}
 
 		return {
-			/** No count to show yet: the bar sweeps until step() or the next page. */
+			/** No count to show: a spinner in place of the bar until step() or the next page. */
 			busy: function () {
 				panel.classList.add( 'is-busy' );
 			},

@@ -48,13 +48,24 @@ class SBSK_Images_Cleaner {
 		$core   = [ 'thumbnail', 'medium', 'medium_large', 'large', '1536x1536', '2048x2048' ];
 		$groups = [
 			'ours'        => [ 'title' => __( 'Image Sizes', 'sb-site-kit' ), 'sizes' => [] ],
-			'wordpress'   => [ 'title' => __( 'WordPress', 'sb-site-kit' ), 'sizes' => [] ],
-			'woocommerce' => [ 'title' => __( 'WooCommerce', 'sb-site-kit' ), 'sizes' => [] ],
 			'other'       => [ 'title' => __( 'Other Image Sizes', 'sb-site-kit' ), 'sizes' => [] ],
+			'woocommerce' => [ 'title' => __( 'WooCommerce', 'sb-site-kit' ), 'sizes' => [] ],
+			'wordpress'   => [ 'title' => __( 'WordPress', 'sb-site-kit' ), 'sizes' => [] ],
 		];
 
+		// Site Kit's own: the widths the Images page registers right now. An
+		// image- name from a snippet, or one Site Kit used to register, is not
+		// one of ours just because of how it is spelt.
+		$ours = [];
+
+		if ( SBSK_Modules::instance()->is_enabled( 'images' ) && SBSK_Images::setting( 'sizes_on', 1 ) ) {
+			foreach ( SBSK_Images::widths() as $width ) {
+				$ours[] = 'image-' . (int) $width;
+			}
+		}
+
 		foreach ( SBSK_Images_Rebuild::all_wanted() as $name => $size ) {
-			if ( strpos( $name, 'image-' ) === 0 ) {
+			if ( in_array( $name, $ours, true ) ) {
 				$key = 'ours';
 			} elseif ( in_array( $name, $core, true ) ) {
 				$key = 'wordpress';
@@ -164,17 +175,25 @@ class SBSK_Images_Cleaner {
 		wp_nonce_field( 'sbsk_save_cleaner_sizes' );
 		echo '<section class="sbsk-section sbsk-cleaner__sizes" id="sbsk-cleaner-sizes">';
 		echo '<div class="sbsk-section__head"><div class="sbsk-section__row"><h2>' . esc_html__( 'Sizes', 'sb-site-kit' ) . '</h2>';
-		// The Images page only exists while Images is switched on.
-		if ( SBSK_Modules::instance()->is_enabled( 'images' ) ) {
-			echo '<a class="sbsk-section__edit" href="' . esc_url( admin_url( 'admin.php?page=' . SBSK_Settings::group_page_slug( 'images' ) ) ) . '">' . esc_html__( 'Edit Sizes', 'sb-site-kit' ) . '</a>';
-		}
 		echo '</div>';
 		echo '<p>' . esc_html__( 'Tick the sizes the scan, Build and Remove old sizes should work on. Saved for you, not the site.', 'sb-site-kit' ) . '</p></div>';
 
 		foreach ( self::size_groups() as $key => $group ) {
 			echo '<div class="sbsk-sizegroup" data-sizegroup="' . esc_attr( $key ) . '">';
-			echo '<div class="sbsk-sizegroup__head"><strong>' . esc_html( $group['title'] ) . '</strong>';
+			echo '<div class="sbsk-sizegroup__head"><span class="sbsk-sizegroup__title"><strong>' . esc_html( $group['title'] ) . '</strong>';
+
+			// Only Site Kit's own widths can be changed, on the Images page, which
+			// exists only while Images is switched on.
+			if ( 'ours' === $key && SBSK_Modules::instance()->is_enabled( 'images' ) ) {
+				echo '<a class="sbsk-sizegroup__edit" href="' . esc_url( admin_url( 'admin.php?page=' . SBSK_Settings::group_page_slug( 'images' ) ) ) . '">' . esc_html__( 'Edit Sizes', 'sb-site-kit' ) . '</a>';
+			}
+
+			echo '</span>';
 			echo '<span><button type="button" class="button-link sb-toggle" data-sb-always-on data-sizes-all>' . esc_html__( 'all', 'sb-site-kit' ) . '</button> | <button type="button" class="button-link sb-toggle" data-sb-always-on data-sizes-none>' . esc_html__( 'none', 'sb-site-kit' ) . '</button></span></div>';
+
+			if ( 'other' === $key ) {
+				echo '<p class="sbsk-sizegroup__note">' . esc_html__( 'Added by the theme, a snippet or another plugin.', 'sb-site-kit' ) . '</p>';
+			}
 
 			foreach ( $group['sizes'] as $name => $size ) {
 				$dims = $size['width'] ? number_format_i18n( $size['width'] ) : '';
