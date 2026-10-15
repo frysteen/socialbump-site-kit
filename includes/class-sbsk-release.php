@@ -330,7 +330,27 @@ class SBSK_Release {
 		$files    = $this->files();
 		$tree     = [];
 		$keep     = [ 'README.md', 'LICENSE', '.gitignore', '.github' ];
-		$top      = $this->github( 'GET', $git . '/trees/' . $old_tree, $token );
+		$known    = [];
+
+		/**
+		 * What the repo already holds, file by file, so anything unchanged is
+		 * pointed at rather than sent again. Every publish used to send all of
+		 * it: the text files in one big request and each of the 37 others (the
+		 * update checker's translations and the icons) in one of its own,
+		 * though they almost never change. If the full listing cannot be had,
+		 * everything is sent as before.
+		 */
+		$top = $this->github( 'GET', $git . '/trees/' . $old_tree . '?recursive=1', $token );
+
+		if ( $top['code'] === 200 && ! empty( $top['body']['tree'] ) && empty( $top['body']['truncated'] ) ) {
+			foreach ( $top['body']['tree'] as $entry ) {
+				if ( isset( $entry['type'], $entry['path'], $entry['sha'] ) && $entry['type'] === 'blob' ) {
+					$known[ $entry['path'] ] = $entry['sha'];
+				}
+			}
+		} else {
+			$top = $this->github( 'GET', $git . '/trees/' . $old_tree, $token );
+		}
 
 		if ( $top['code'] === 200 && ! empty( $top['body']['tree'] ) ) {
 			foreach ( $top['body']['tree'] as $entry ) {
@@ -347,6 +367,21 @@ class SBSK_Release {
 
 		foreach ( $files as $rel => $abs ) {
 			$content = (string) file_get_contents( $abs );
+
+			// Git names a file by this hash of its contents, so the same hash
+			// means GitHub already has exactly this file.
+			$sha = sha1( 'blob ' . strlen( $content ) . chr( 0 ) . $content );
+
+			if ( isset( $known[ $rel ] ) && $known[ $rel ] === $sha ) {
+				$tree[] = [
+					'path' => $rel,
+					'mode' => '100644',
+					'type' => 'blob',
+					'sha'  => $sha,
+				];
+				continue;
+			}
+
 			$binary  = strpos( $content, "\0" ) !== false || ! preg_match( '//u', $content );
 
 			if ( ! $binary ) {

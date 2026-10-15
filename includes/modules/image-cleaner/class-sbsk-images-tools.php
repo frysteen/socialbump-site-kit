@@ -914,7 +914,12 @@ class SBSK_Images_Tools {
 		if ( $done ) {
 			self::job_end();
 		} else {
-			self::job_beat( 'deep', $offset + count( $batch ), $total, basename( (string) end( $batch ) ) );
+			// For a window watching: what this page has done and the total it fixed
+			// at the start, the same numbers as its own bar. Shown, never used.
+			$seen      = isset( $_POST['seen'] ) ? max( 0, (int) $_POST['seen'] ) : $offset;
+			$run_total = isset( $_POST['run_total'] ) ? max( 0, (int) $_POST['run_total'] ) : 0;
+
+			self::job_beat( 'deep', $seen + count( $batch ), $run_total > 0 ? $run_total : $total, basename( (string) end( $batch ) ) );
 		}
 
 		wp_send_json_success(

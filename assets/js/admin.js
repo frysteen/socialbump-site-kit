@@ -945,6 +945,11 @@
 				var freed   = 0;
 				var skipped = [];
 
+				// Fixed from the first answer. The server counts the files still left
+				// each time, which shrinks as they go, so measuring the bar against
+				// that filled it by about halfway.
+				var runTotal = 0;
+
 				// The same progress popup as the rebuild.
 				buttons( false );
 				openJob( 'Deleting leftover thumbnails' );
@@ -978,7 +983,7 @@
 				 * their reasons and are shown once it finishes.
 				 */
 				function batch( offset ) {
-					$.post( ajaxurl, { action: 'sbsk_images_deep_remove', nonce: nonce, job: jobToken, dims: dims, offset: offset } ).done( function ( response ) {
+					$.post( ajaxurl, { action: 'sbsk_images_deep_remove', nonce: nonce, job: jobToken, dims: dims, offset: offset, seen: removed + skipped.length, run_total: runTotal } ).done( function ( response ) {
 						var busy = busyIn( response );
 
 						if ( busy ) {
@@ -1009,12 +1014,16 @@
 						freed   += data.bytes;
 						skipped  = skipped.concat( data.skipped || [] );
 
-						var seen = Math.min( removed + skipped.length, data.total || files );
+						if ( ! runTotal ) {
+							runTotal = data.total || files;
+						}
+
+						var seen = Math.min( removed + skipped.length, runTotal );
 
 						seenNow = removed;
 						paintTimer();
-						$bar.css( 'width', ( data.total ? Math.round( ( seen / data.total ) * 100 ) : 0 ) + '%' );
-						$status.text( removed + ' of ' + files + ' removed.' );
+						$bar.css( 'width', ( runTotal ? Math.round( ( seen / runTotal ) * 100 ) : 0 ) + '%' );
+						$status.text( seen + ' of ' + runTotal + ' checked, ' + removed + ' removed.' );
 
 						if ( ! data.done && ! stopped ) {
 							batch( data.offset );
@@ -1310,7 +1319,9 @@
 					paintTimer();
 
 					$bar.css( 'width', pct + '%' );
-					$status.text( cleared + ' of ' + data.total + ' removed.' );
+					// Files kept or still in use move the bar but are not removed, so the
+					// line counts both rather than ending short of the bar.
+					$status.text( seen + ' of ' + data.total + ' checked, ' + cleared + ' removed.' );
 
 					if ( data.done || stopped ) {
 						$bar.css( 'width', data.done ? '100%' : pct + '%' );

@@ -2291,3 +2291,37 @@ Two follow ups to the size groups and the summary popup.
   added for that request only showed under Other Image Sizes, and the
   attachment edit page renders the grouped box with no PHP errors. Not yet
   seen in a browser.
+
+## Progress counts that match the bar, and a faster publish (October 2026)
+
+Sam saw a bar finish well before its count on a big delete.
+
+- Find leftover thumbnails' delete: ajax_deep_remove() works out the matching
+  files afresh each request, so its total is what is left, and it shrinks as
+  files go. The page measured its running count (removed plus left alone)
+  against that shrinking number, so the bar was full about halfway. The page
+  now keeps the first answer's total (runTotal) for the whole run, and the
+  line reads "9 of 12 checked, 6 removed." It also sends seen and run_total
+  with each request; the server uses them only for job_beat, so a window
+  watching shows the same numbers. In jsdom with a shrinking total the old
+  code went 25%, 60%, 100% at 6 of 12 and the new one 25%, 50%, 75%.
+- Orphaned images delete: the bar is files checked from a list fixed for the
+  run, but the line counted only files removed, so kept or still used files
+  left it short. The line is now "400 of 900 checked, 250 removed."
+- The build and Remove old sizes already use one held list for both the bar
+  and the line; nothing found wrong there.
+- Publish (hub only, no release note): push_code() used to send every file
+  each time, the text ones in one big tree request and the 37 others (the
+  update checker's .mo translations and the two icons) as a blob request each.
+  Each GitHub call takes about a third of a second from the hub, and the
+  publish took 32 seconds. Now it first lists the repo's tree with
+  ?recursive=1 and, for each local file, works out git's blob hash
+  (sha1 of "blob <length>\0<contents>"). A match is put in the new tree by
+  that sha and nothing is sent; only changed files go inline or as blobs. The
+  keep list (README.md, LICENSE, .gitignore, .github) still comes from the
+  top level entries of the same listing. If the listing fails or comes back
+  truncated, it falls back to the old way and sends everything. A dry run
+  against the repo after 1.2.5: listing 0.36 seconds, 194 of 197 files
+  matched, the 3 changed files would be sent, no blob uploads. Not yet timed
+  on a real publish. Once it is, copy the same change into SocialBUMP Tweaks,
+  Bricks Tweaks and SEO for AI's release classes.
